@@ -2,6 +2,7 @@ BASEDIR = $(CURDIR)
 CLASSES = $(BASEDIR)/classes/ $(BASEDIR)/../modules/
 OUTPUTDIR = $(BASEDIR)/_build
 TOOLSDIR = $(BASEDIR)/tools
+SHELL := /bin/bash
 
 .ONESHELL:
 

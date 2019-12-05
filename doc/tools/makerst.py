@@ -414,7 +414,7 @@ def make_rst_class(class_def, state, dry_run, output_dir):  # type: (ClassDef, S
             if property_def.overridden:
                 ml.append((type_rst, property_def.name, "**O:** " + default))
             else:
-                ref = ":ref:`{0}<class_{1}_property_{0}>`".format(property_def.name, class_name)
+                ref = ":ref:`{0} <class_{1}_property_{0}>`".format(property_def.name, class_name)
                 ml.append((type_rst, ref, default))
         format_table(f, ml, True)
 
@@ -820,7 +820,7 @@ def rstize_text(text, state):  # type: (str, State) -> str
                 repl_text = method_param
                 if class_param != state.current_class:
                     repl_text = "{}.{}".format(class_param, method_param)
-                tag_text = ':ref:`{}<class_{}{}_{}>`'.format(repl_text, class_param, ref_type, method_param)
+                tag_text = ':ref:`{} <class_{}{}_{}>`'.format(repl_text, class_param, ref_type, method_param)
                 escape_post = True
             elif cmd.find('image=') == 0:
                 tag_text = ""  # '![](' + cmd[6:] + ')'
@@ -948,7 +948,7 @@ def format_table(f, data, remove_empty_columns=False):  # type: (TextIO, Iterabl
 
 def make_type(t, state):  # type: (str, State) -> str
     if t in state.classes:
-        return ':ref:`{0}<class_{0}>`'.format(t)
+        return ':ref:`{0} <class_{0}>`'.format(t)
     print_error("Unresolved type '{}', file: {}".format(t, state.current_class), state)
     return t
 
@@ -972,7 +972,7 @@ def make_enum(t, state):  # type: (str, State) -> str
         c = c[1:] # Remove the underscore prefix
 
     if c in state.classes and e in state.classes[c].enums:
-        return ":ref:`{0}<enum_{1}_{0}>`".format(e, c)
+        return ":ref:`{0} <enum_{1}_{0}>`".format(e, c)
 
     # Don't fail for `Vector3.Axis`, as this enum is a special case which is expected not to be resolved.
     if "{}.{}".format(c, e) != "Vector3.Axis":
@@ -992,7 +992,7 @@ def make_method_signature(class_def, method_def, make_ref, state):  # type: (Cla
     out = ""
 
     if make_ref:
-        out += ":ref:`{0}<class_{1}_{2}_{0}>` ".format(method_def.name, class_def.name, ref_type)
+        out += ":ref:`{0} <class_{1}_{2}_{0}>` ".format(method_def.name, class_def.name, ref_type)
     else:
         out += "**{}** ".format(method_def.name)
 
