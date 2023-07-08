@@ -89,7 +89,7 @@ void ViewportTexture::setup_local_to_scene() {
 }
 
 void ViewportTexture::set_viewport_path_in_scene(const NodePath &p_path) {
-	if (path == p_path) {
+	if (vp && path == p_path) {
 		return;
 	}
 
@@ -4453,6 +4453,7 @@ Viewport::~Viewport() {
 	// Erase itself from viewport textures.
 	for (ViewportTexture *E : viewport_textures) {
 		E->vp = nullptr;
+		E->configure_for_local_scene(nullptr, HashMap<Ref<Resource>, Ref<Resource>>());
 	}
 	ERR_FAIL_NULL(RenderingServer::get_singleton());
 	RenderingServer::get_singleton()->free(viewport);
