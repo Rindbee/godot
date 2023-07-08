@@ -4453,7 +4453,7 @@ Viewport::~Viewport() {
 	// Erase itself from viewport textures.
 	for (ViewportTexture *E : viewport_textures) {
 		E->vp = nullptr;
-		E->configure_for_local_scene(nullptr, HashMap<Ref<Resource>, Ref<Resource>>());
+		E->set_path(String());
 	}
 	ERR_FAIL_NULL(RenderingServer::get_singleton());
 	RenderingServer::get_singleton()->free(viewport);
