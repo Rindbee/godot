@@ -223,58 +223,33 @@ private:
 		new_child.parent_id = p_parent_id;
 	}
 
-	void node_remove_child(uint32_t p_parent_id, uint32_t p_child_id, uint32_t p_tree_id, bool p_prevent_sibling = false) {
+	// Remove a child node from a non-leaf node, returns the node id of the sibling node's parent.
+	uint32_t node_remove_child(uint32_t p_parent_id, uint32_t p_child_id, uint32_t p_tree_id) {
 		TNode &parent = _nodes[p_parent_id];
 		BVH_ASSERT(!parent.is_leaf());
+		BVH_ASSERT(parent.num_children > 1); // A redundant node (with only one child node) will be removed automatically.
 
 		int child_num = parent.find_child(p_child_id);
 		BVH_ASSERT(child_num != -1);
 
 		parent.remove_child_internal(child_num);
 
-		// no need to keep back references for children at the moment
-
-		uint32_t sibling_id = 0; // always a node id, as tnode is never a leaf
-		bool sibling_present = false;
-
-		// if there are more children, or this is the root node, don't try and delete
 		if (parent.num_children > 1) {
-			return;
+			return p_parent_id;
 		}
 
-		// if there is 1 sibling, it can be moved to be a child of the
-		if (parent.num_children == 1) {
-			// else there is now a redundant node with one child, which can be removed
-			sibling_id = parent.children[0];
-			sibling_present = true;
-		}
+		// The parent node becomes a redundant node with only one child node, so it can be deleted to simplify the hierarchy.
+		uint32_t parent_id = parent.parent_id;
 
-		// now there may be no children in this node .. in which case it can be deleted
-		// remove node if empty
-		// remove link from parent
-		uint32_t grandparent_id = parent.parent_id;
-
-		// special case for root node
-		if (grandparent_id == BVHCommon::INVALID) {
-			if (sibling_present) {
-				// change the root node
-				change_root_node(sibling_id, p_tree_id);
-
-				// delete the old root node as no longer needed
-				node_free_node_and_leaf(p_parent_id);
-			}
-
-			return;
-		}
-
-		if (sibling_present) {
-			node_replace_child(grandparent_id, p_parent_id, sibling_id);
+		if (parent_id == BVHCommon::INVALID) {
+			change_root_node(parent.children[0], p_tree_id); // Change the root node.
 		} else {
-			node_remove_child(grandparent_id, p_parent_id, p_tree_id, true);
+			node_replace_child(parent_id, p_parent_id, parent.children[0]);
 		}
 
-		// put the node on the free list to recycle
+		// Free the parent node for recycle.
 		node_free_node_and_leaf(p_parent_id);
+		return parent_id;
 	}
 
 	// A node can either be a node, or a node AND a leaf combo.
