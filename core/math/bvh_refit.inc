@@ -37,6 +37,7 @@ void node_update_aabb(TNode &tnode) {
 #endif
 	} else {
 		// leaf
+		tnode.dirty = false;
 		const TLeaf &leaf = _node_get_leaf(tnode);
 
 		for (int n = 0; n < leaf.num_items; n++) {
@@ -132,7 +133,6 @@ void refit_branch(uint32_t p_node_id) {
 		} else {
 			// leaf .. only refit upward if dirty
 			if (tnode.dirty) {
-				tnode.dirty = false;
 				refit_upward(rp.node_id);
 			}
 		}
