@@ -301,63 +301,59 @@ private:
 		CRASH_COND(!tnode.is_leaf());
 
 		TLeaf &leaf = _node_get_leaf(tnode);
+		BVH_ASSERT(leaf.num_items > 0);
 
 		// if the aabb is not determining the corner size, then there is no need to refit!
 		// (optimization, as merging AABBs takes a lot of time)
 		const BVHABB_CLASS &old_aabb = leaf.get_aabb(ref.item_id);
-
-		// shrink a little to prevent using corner aabbs
-		// in order to miss the corners first we shrink by node_expansion
-		// (which is added to the overall bound of the leaf), then we also
-		// shrink by an epsilon, in order to miss out the very corner aabbs
-		// which are important in determining the bound. Any other aabb
-		// within this can be removed and not affect the overall bound.
-		BVHABB_CLASS node_bound = tnode.aabb;
-		node_bound.expand(-_node_expansion - 0.001f);
-		bool refit = true;
-
-		if (node_bound.is_other_within(old_aabb)) {
-			refit = false;
-		}
 
 		// record the old aabb if required (for incremental remove_and_reinsert)
 		if (r_old_aabb) {
 			*r_old_aabb = old_aabb;
 		}
 
-		leaf.remove_item_unordered(ref.item_id);
+		if (leaf.num_items > 1) {
+			// shrink a little to prevent using corner aabbs
+			// in order to miss the corners first we shrink by node_expansion
+			// (which is added to the overall bound of the leaf), then we also
+			// shrink by an epsilon, in order to miss out the very corner aabbs
+			// which are important in determining the bound. Any other aabb
+			// within this can be removed and not affect the overall bound.
+			BVHABB_CLASS node_bound = tnode.aabb;
+			node_bound.expand(-_node_expansion - 0.001f);
 
-		if (leaf.num_items) {
-			// the swapped item has to have its reference changed to, to point to the new item id
-			uint32_t swapped_ref_id = leaf.get_item_ref_id(ref.item_id);
+			leaf.remove_item_unordered(ref.item_id);
 
-			ItemRef &swapped_ref = _refs[swapped_ref_id];
+			// Swap is only required when the removed item is not at the end.
+			if (leaf.num_items != ref.item_id) {
+				// the swapped item has to have its reference changed to, to point to the new item id
+				uint32_t swapped_ref_id = leaf.get_item_ref_id(ref.item_id);
 
-			swapped_ref.item_id = ref.item_id;
+				ItemRef &swapped_ref = _refs[swapped_ref_id];
+
+				swapped_ref.item_id = ref.item_id;
+			}
 
 			// only have to refit if it is an edge item
 			// This is a VERY EXPENSIVE STEP
 			// we defer the refit updates until the update function is called once per frame
-			if (refit) {
-				tnode.dirty = true;
-			}
+			tnode.dirty = tnode.dirty || !node_bound.is_other_within(old_aabb);
 		} else {
-			// remove node if empty
-			// remove link from parent
-			if (tnode.parent_id != BVHCommon::INVALID) {
-				// DANGER .. this can potentially end up with root node with 1 child ...
-				// we don't want this and must check for it
+			BVH_ASSERT(ref.item_id == 0);
 
+			if (tnode.parent_id == BVHCommon::INVALID) {
+				// Deletion of root nodes is allowed, but should only be done when necessary.
+				_root_node_id[p_tree_id] = BVHCommon::INVALID;
+			} else {
+				// For a non-root node, its new parent node should be refit after removal.
 				uint32_t parent_id = tnode.parent_id;
 
-				node_remove_child(parent_id, owner_node_id, p_tree_id);
+				parent_id = node_remove_child(parent_id, owner_node_id, p_tree_id);
 				refit_upward(parent_id);
-
-				// put the node on the free list to recycle
-				node_free_node_and_leaf(owner_node_id);
 			}
 
-			// else if no parent, it is the root node. Do not delete
+			// Free the node for recycle.
+			node_free_node_and_leaf(owner_node_id);
 		}
 
 		ref.tnode_id = BVHCommon::INVALID;

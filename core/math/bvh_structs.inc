@@ -85,6 +85,9 @@ public:
 	void remove_item_unordered(uint32_t p_id) {
 		BVH_ASSERT(p_id < num_items);
 		num_items--;
+		if (p_id == num_items) {
+			return; // If the removed item is at the end, no swap is needed.
+		}
 		aabbs[p_id] = aabbs[num_items];
 		item_ref_ids[p_id] = item_ref_ids[num_items];
 	}
