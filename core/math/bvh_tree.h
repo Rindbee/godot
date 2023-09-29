@@ -308,6 +308,7 @@ private:
 
 		TNode &node = _nodes[p_node_id];
 		node.neg_leaf_id = -(int)child_leaf_id;
+		node.dirty = false;
 	}
 
 	void node_remove_item(uint32_t p_ref_id, uint32_t p_tree_id, BVHABB_CLASS *r_old_aabb = nullptr) {
@@ -363,7 +364,7 @@ private:
 			// This is a VERY EXPENSIVE STEP
 			// we defer the refit updates until the update function is called once per frame
 			if (refit) {
-				leaf.set_dirty(true);
+				tnode.dirty = true;
 			}
 		} else {
 			// remove node if empty

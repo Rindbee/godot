@@ -53,7 +53,6 @@ struct TLeaf {
 	uint16_t num_items;
 
 private:
-	uint16_t dirty;
 	// separate data orientated lists for faster SIMD traversal
 	uint32_t item_ref_ids[MAX_ITEMS];
 	BVHABB_CLASS aabbs[MAX_ITEMS];
@@ -78,12 +77,8 @@ public:
 		return item_ref_ids[p_id];
 	}
 
-	bool is_dirty() const { return dirty; }
-	void set_dirty(bool p) { dirty = p; }
-
 	void clear() {
 		num_items = 0;
-		set_dirty(false);
 	}
 	bool is_full() const { return num_items >= MAX_ITEMS; }
 
@@ -118,8 +113,11 @@ struct TNode {
 		int32_t neg_leaf_id;
 	};
 	uint32_t parent_id; // or -1
-	uint16_t children[MAX_CHILDREN];
 
+	union {
+		uint16_t children[MAX_CHILDREN];
+		uint16_t dirty; // Indicates whether the leaf node needs to update its aabb from its leaf's aabbs.
+	};
 	// height in the tree, where leaves are 0, and all above are 1+
 	// (or the highest where there is a tie off)
 	int32_t height;
