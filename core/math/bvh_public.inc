@@ -162,6 +162,26 @@ bool item_move(BVHHandle p_handle, const BOUNDS &p_aabb) {
 	print_line("item_move " + itos(p_handle.id()) + "(outside tnode aabb) : " + _debug_aabb_to_string(abb));
 #endif
 
+	// No need to remove and reinsert item at the root leaf node.
+	if (tnode.parent_id == BVHCommon::INVALID) {
+		TLeaf &leaf = _node_get_leaf(tnode);
+		BVHABB_CLASS &leaf_abb = leaf.get_aabb(ref.item_id);
+
+		// Is item's new aabb extended from its old aabb?
+		bool is_expanded = abb.is_other_within(leaf_abb);
+
+		leaf_abb = abb;
+
+		if (is_expanded) {
+			abb.expand(_node_expansion);
+			tnode.aabb.merge(abb);
+		} else {
+			node_update_aabb(tnode);
+		}
+
+		return true;
+	}
+
 	uint32_t tree_id = _handle_get_tree_id(p_handle);
 
 	// remove and reinsert

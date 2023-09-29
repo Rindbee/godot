@@ -16,6 +16,10 @@ void _logic_item_remove_and_reinsert(uint32_t p_ref_id) {
 	}
 
 	BVH_ASSERT(ref.tnode_id != BVHCommon::INVALID);
+	if (_nodes[ref.tnode_id].parent_id == BVHCommon::INVALID) {
+		// No need to remove and reinsert item at the root leaf node.
+		return;
+	}
 
 	// some overlay elaborate way to find out which tree the node is in!
 	BVHHandle temp_handle;
