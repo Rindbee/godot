@@ -324,6 +324,7 @@ void EditorFileSystem::_scan_filesystem() {
 
 	new_filesystem = memnew(EditorFileSystemDirectory);
 	new_filesystem->parent = nullptr;
+	new_filesystem->verified = true;
 
 	Ref<DirAccess> d = DirAccess::create(DirAccess::ACCESS_RESOURCES);
 	d->change_dir("res://");
@@ -586,6 +587,7 @@ bool EditorFileSystem::_update_scan_actions() {
 				} else {
 					ia.dir->subdirs.insert(idx, ia.new_dir);
 				}
+				ia.dir->subdirs[idx]->verified = true;
 
 				fs_changed = true;
 			} break;
@@ -608,6 +610,7 @@ bool EditorFileSystem::_update_scan_actions() {
 				} else {
 					ia.dir->files.insert(idx, ia.new_file);
 				}
+				ia.dir->files[idx]->verified = true;
 
 				fs_changed = true;
 
@@ -830,6 +833,7 @@ void EditorFileSystem::_scan_new_dir(EditorFileSystemDirectory *p_dir, Ref<DirAc
 				} else {
 					p_dir->subdirs.insert(idx2, efd);
 				}
+				efd->verified = true;
 
 				da->change_dir("..");
 			}
@@ -953,6 +957,7 @@ void EditorFileSystem::_scan_new_dir(EditorFileSystemDirectory *p_dir, Ref<DirAc
 		}
 
 		p_dir->files.push_back(fi);
+		fi->verified = true;
 		p_progress.update(idx, total);
 	}
 }
@@ -960,11 +965,9 @@ void EditorFileSystem::_scan_new_dir(EditorFileSystemDirectory *p_dir, Ref<DirAc
 void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, const ScanProgress &p_progress) {
 	uint64_t current_mtime = FileAccess::get_modified_time(p_dir->get_path());
 
-	bool updated_dir = false;
 	String cd = p_dir->get_path();
 
 	if (current_mtime != p_dir->modified_time || using_fat32_or_exfat) {
-		updated_dir = true;
 		p_dir->modified_time = current_mtime;
 		//ooooops, dir changed, see what's going on
 
@@ -1078,7 +1081,7 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, const 
 	}
 
 	for (int i = 0; i < p_dir->files.size(); i++) {
-		if (updated_dir && !p_dir->files[i]->verified) {
+		if (!p_dir->files[i]->verified) {
 			//this file was removed, add action to remove it
 			ItemAction ia;
 			ia.action = ItemAction::ACTION_FILE_REMOVE;
@@ -1134,7 +1137,7 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, const 
 	}
 
 	for (int i = 0; i < p_dir->subdirs.size(); i++) {
-		if ((updated_dir && !p_dir->subdirs[i]->verified) || _should_skip_directory(p_dir->subdirs[i]->get_path())) {
+		if ((!p_dir->subdirs[i]->verified) || _should_skip_directory(p_dir->subdirs[i]->get_path())) {
 			//this directory was removed or ignored, add action to remove it
 			ItemAction ia;
 			ia.action = ItemAction::ACTION_DIR_REMOVE;
@@ -1713,6 +1716,7 @@ void EditorFileSystem::update_file(const String &p_file) {
 	fs->files[cpos]->modified_time = FileAccess::get_modified_time(p_file);
 	fs->files[cpos]->deps = _get_dependencies(p_file);
 	fs->files[cpos]->import_valid = type == "TextFile" ? true : ResourceLoader::is_import_valid(p_file);
+	fs->files[cpos]->verified = true;
 
 	if (uid != ResourceUID::INVALID_ID) {
 		if (ResourceUID::get_singleton()->has_id(uid)) {
@@ -2583,6 +2587,7 @@ EditorFileSystem::EditorFileSystem() {
 	singleton = this;
 	filesystem = memnew(EditorFileSystemDirectory); //like, empty
 	filesystem->parent = nullptr;
+	filesystem->verified = true;
 
 	new_filesystem = nullptr;
 
