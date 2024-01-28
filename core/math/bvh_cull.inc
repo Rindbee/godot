@@ -29,12 +29,7 @@ struct CullParams {
 
 private:
 void _cull_translate_hits(CullParams &p) {
-	int num_hits = _cull_hits.size();
-	int left = p.result_max - p.result_count_overall;
-
-	if (num_hits > left) {
-		num_hits = left;
-	}
+	const int num_hits = MIN((int)_cull_hits.size(), p.result_max - p.result_count_overall);
 
 	int out_n = p.result_count_overall;
 
@@ -60,19 +55,12 @@ int cull_convex(CullParams &r_params, bool p_translate_hits = true) {
 	_cull_hits.clear();
 	r_params.result_count = 0;
 
-	uint32_t tree_test_mask = 0;
-
 	for (int n = 0; n < NUM_TREES; n++) {
-		tree_test_mask <<= 1;
-		if (!tree_test_mask) {
-			tree_test_mask = 1;
-		}
-
 		if (_root_node_id[n] == BVHCommon::INVALID) {
 			continue;
 		}
 
-		if (!(r_params.tree_collision_mask & tree_test_mask)) {
+		if (!(r_params.tree_collision_mask & (1 << n))) {
 			continue;
 		}
 
@@ -90,19 +78,12 @@ int cull_segment(CullParams &r_params, bool p_translate_hits = true) {
 	_cull_hits.clear();
 	r_params.result_count = 0;
 
-	uint32_t tree_test_mask = 0;
-
 	for (int n = 0; n < NUM_TREES; n++) {
-		tree_test_mask <<= 1;
-		if (!tree_test_mask) {
-			tree_test_mask = 1;
-		}
-
 		if (_root_node_id[n] == BVHCommon::INVALID) {
 			continue;
 		}
 
-		if (!(r_params.tree_collision_mask & tree_test_mask)) {
+		if (!(r_params.tree_collision_mask & (1 << n))) {
 			continue;
 		}
 
@@ -120,19 +101,12 @@ int cull_point(CullParams &r_params, bool p_translate_hits = true) {
 	_cull_hits.clear();
 	r_params.result_count = 0;
 
-	uint32_t tree_test_mask = 0;
-
 	for (int n = 0; n < NUM_TREES; n++) {
-		tree_test_mask <<= 1;
-		if (!tree_test_mask) {
-			tree_test_mask = 1;
-		}
-
 		if (_root_node_id[n] == BVHCommon::INVALID) {
 			continue;
 		}
 
-		if (!(r_params.tree_collision_mask & tree_test_mask)) {
+		if (!(r_params.tree_collision_mask & (1 << n))) {
 			continue;
 		}
 
@@ -150,20 +124,13 @@ int cull_aabb(CullParams &r_params, bool p_translate_hits = true) {
 	_cull_hits.clear();
 	r_params.result_count = 0;
 
-	uint32_t tree_test_mask = 0;
-
 	for (int n = 0; n < NUM_TREES; n++) {
-		tree_test_mask <<= 1;
-		if (!tree_test_mask) {
-			tree_test_mask = 1;
-		}
-
 		if (_root_node_id[n] == BVHCommon::INVALID) {
 			continue;
 		}
 
 		// the tree collision mask determines which trees to collide test against
-		if (!(r_params.tree_collision_mask & tree_test_mask)) {
+		if (!(r_params.tree_collision_mask & (1 << n))) {
 			continue;
 		}
 
