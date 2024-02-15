@@ -566,6 +566,9 @@ Node *SceneState::instantiate(GenEditState p_edit_state) const {
 			callable = callable.bindp(argptrs, binds.size());
 		}
 
+		if (!Engine::get_singleton()->is_editor_hint() && cfrom->is_connected(snames[c.signal], callable)) {
+			continue; // Edge case. Modifying connections in the main scene is not yet allowed.
+		}
 		cfrom->connect(snames[c.signal], callable, CONNECT_PERSIST | c.flags | (p_edit_state == GEN_EDIT_STATE_MAIN ? 0 : CONNECT_INHERITED));
 	}
 

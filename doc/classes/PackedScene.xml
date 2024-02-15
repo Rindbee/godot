@@ -100,6 +100,7 @@
 			<param index="0" name="path" type="Node" />
 			<description>
 				Pack will ignore any sub-nodes not owned by given node. See [member Node.owner].
+				[b]Note:[/b] Using this method outside of the editor may produce redundant records.
 			</description>
 		</method>
 	</methods>
