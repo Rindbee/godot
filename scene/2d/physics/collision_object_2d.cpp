@@ -658,7 +658,7 @@ void CollisionObject2D::_bind_methods() {
 CollisionObject2D::CollisionObject2D(RID p_rid, bool p_area) {
 	rid = p_rid;
 	area = p_area;
-	pickable = true;
+	pickable = p_area;
 	set_notify_transform(true);
 	set_hide_clip_children(true);
 	total_subshapes = 0;
@@ -668,7 +668,6 @@ CollisionObject2D::CollisionObject2D(RID p_rid, bool p_area) {
 		PhysicsServer2D::get_singleton()->area_attach_object_instance_id(rid, get_instance_id());
 	} else {
 		PhysicsServer2D::get_singleton()->body_attach_object_instance_id(rid, get_instance_id());
-		PhysicsServer2D::get_singleton()->body_set_mode(rid, body_mode);
 	}
 }
 

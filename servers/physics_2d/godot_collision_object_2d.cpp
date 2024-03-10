@@ -99,13 +99,37 @@ void GodotCollisionObject2D::set_shape_disabled(int p_idx, bool p_disabled) {
 	}
 }
 
+// Remove a shape, all the times it appears.
 void GodotCollisionObject2D::remove_shape(GodotShape2D *p_shape) {
-	//remove a shape, all the times it appears
+	bool found = false;
+
 	for (int i = 0; i < shapes.size(); i++) {
+		if (found && shapes[i].bpid) {
+			// The bpid needs to be updated since shapes are re-indexed.
+			space->get_broadphase()->remove(shapes[i].bpid);
+			shapes.write[i].bpid = 0;
+		}
+
 		if (shapes[i].shape == p_shape) {
-			remove_shape(i);
+			if (!found) {
+				found = true;
+				if (shapes[i].bpid) {
+					// The bpid needs to be updated since shapes are re-indexed.
+					space->get_broadphase()->remove(shapes[i].bpid);
+					shapes.write[i].bpid = 0;
+				}
+
+				shapes[i].shape->remove_owner(this);
+			}
+
+			shapes.remove_at(i);
+
 			i--;
 		}
+	}
+
+	if (found && !pending_shape_update_list.in_list()) {
+		GodotPhysicsServer2D::godot_singleton->pending_shape_update_list.add(&pending_shape_update_list);
 	}
 }
 
@@ -177,7 +201,6 @@ void GodotCollisionObject2D::_update_shapes() {
 
 		if (s.bpid == 0) {
 			s.bpid = space->get_broadphase()->create(this, i, shape_aabb, _static);
-			space->get_broadphase()->set_static(s.bpid, _static);
 		}
 
 		space->get_broadphase()->move(s.bpid, shape_aabb);
@@ -204,7 +227,6 @@ void GodotCollisionObject2D::_update_shapes_with_motion(const Vector2 &p_motion)
 
 		if (s.bpid == 0) {
 			s.bpid = space->get_broadphase()->create(this, i, shape_aabb, _static);
-			space->get_broadphase()->set_static(s.bpid, _static);
 		}
 
 		space->get_broadphase()->move(s.bpid, shape_aabb);

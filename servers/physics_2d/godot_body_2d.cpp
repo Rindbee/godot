@@ -65,13 +65,11 @@ void GodotBody2D::update_mass_properties() {
 
 						real_t area = get_shape_aabb(i).get_area();
 
-						real_t mass_new = area * mass / total_area;
+						real_t weight = area / total_area;
 
 						// NOTE: we assume that the shape origin is also its center of mass.
-						center_of_mass_local += mass_new * get_shape_transform(i).get_origin();
+						center_of_mass_local += weight * get_shape_transform(i).get_origin();
 					}
-
-					center_of_mass_local /= mass;
 				}
 			}
 
@@ -259,11 +257,12 @@ void GodotBody2D::set_mode(PhysicsServer2D::BodyMode p_mode) {
 			_set_inv_transform(get_transform().affine_inverse());
 			_inv_mass = 0;
 			_inv_inertia = 0;
-			_set_static(p_mode == PhysicsServer2D::BODY_MODE_STATIC);
-			set_active(p_mode == PhysicsServer2D::BODY_MODE_KINEMATIC && contacts.size());
+			const bool is_static = p_mode == PhysicsServer2D::BODY_MODE_STATIC;
+			_set_static(is_static);
+			set_active(!is_static && contacts.size());
 			linear_velocity = Vector2();
 			angular_velocity = 0;
-			if (mode == PhysicsServer2D::BODY_MODE_KINEMATIC && prev != mode) {
+			if (!is_static && prev != mode) {
 				first_time_kinematic = true;
 			}
 		} break;
@@ -323,9 +322,9 @@ void GodotBody2D::set_state(PhysicsServer2D::BodyState p_state, const Variant &p
 				_set_transform(t);
 				_set_inv_transform(get_transform().inverse());
 				_update_transform_dependent();
-			}
-			wakeup();
 
+				set_active(true);
+			}
 		} break;
 		case PhysicsServer2D::BODY_STATE_LINEAR_VELOCITY: {
 			linear_velocity = p_variant;
@@ -351,9 +350,7 @@ void GodotBody2D::set_state(PhysicsServer2D::BodyState p_state, const Variant &p
 				//biased_angular_velocity=Vector3();
 				set_active(false);
 			} else {
-				if (mode != PhysicsServer2D::BODY_MODE_STATIC) {
-					set_active(true);
-				}
+				set_active(true);
 			}
 		} break;
 		case PhysicsServer2D::BODY_STATE_CAN_SLEEP: {
@@ -678,7 +675,8 @@ void GodotBody2D::call_queries() {
 
 	if (fi_callback_data) {
 		if (!fi_callback_data->callable.is_valid()) {
-			set_force_integration_callback(Callable());
+			memdelete(fi_callback_data);
+			fi_callback_data = nullptr;
 		} else {
 			const Variant *vp[2] = { &direct_state_variant, &fi_callback_data->udata };
 

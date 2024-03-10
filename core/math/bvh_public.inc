@@ -318,15 +318,12 @@ bool item_set_tree(const BVHHandle &p_handle, uint32_t p_tree_id, uint32_t p_tre
 	ItemRef &ref = _refs[ref_id];
 
 	bool active = ref.is_active();
-	bool tree_changed = ex.tree_id != p_tree_id;
-	bool mask_changed = ex.tree_collision_mask != p_tree_collision_mask;
-	bool state_changed = tree_changed | mask_changed;
+	bool state_changed = (ex.tree_id != p_tree_id) || (ex.tree_collision_mask != p_tree_collision_mask);
 
 	// Keep an eye on this for bugs of not noticing changes to objects,
 	// especially when changing client user masks that will not be detected as a change
 	// in the BVH. You may need to force a collision check in this case with recheck_pairs().
-
-	if (active && (tree_changed | mask_changed)) {
+	if (active && state_changed) {
 		// record abb
 		TNode &tnode = _nodes[ref.tnode_id];
 		TLeaf &leaf = _node_get_leaf(tnode);

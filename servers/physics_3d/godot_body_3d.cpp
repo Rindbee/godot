@@ -78,13 +78,11 @@ void GodotBody3D::update_mass_properties() {
 
 						real_t area = get_shape_area(i);
 
-						real_t mass_new = area * mass / total_area;
+						real_t weight = area / total_area;
 
 						// NOTE: we assume that the shape origin is also its center of mass.
-						center_of_mass_local += mass_new * get_shape_transform(i).origin;
+						center_of_mass_local += weight * get_shape_transform(i).origin;
 					}
-
-					center_of_mass_local /= mass;
 				}
 			}
 
@@ -375,8 +373,9 @@ void GodotBody3D::set_state(PhysicsServer3D::BodyState p_state, const Variant &p
 				_set_transform(t);
 				_set_inv_transform(get_transform().inverse());
 				_update_transform_dependent();
+
+				set_active(true);
 			}
-			wakeup();
 
 		} break;
 		case PhysicsServer3D::BODY_STATE_LINEAR_VELOCITY: {
@@ -761,7 +760,8 @@ void GodotBody3D::call_queries() {
 
 	if (fi_callback_data) {
 		if (!fi_callback_data->callable.is_valid()) {
-			set_force_integration_callback(Callable());
+			memdelete(fi_callback_data);
+			fi_callback_data = nullptr;
 		} else {
 			const Variant *vp[2] = { &direct_state_variant, &fi_callback_data->udata };
 

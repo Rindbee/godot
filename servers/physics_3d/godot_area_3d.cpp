@@ -95,10 +95,6 @@ void GodotArea3D::set_monitor_callback(const Callable &p_callback) {
 	monitored_areas.clear();
 
 	_shape_changed();
-
-	if (!moved_list.in_list() && get_space()) {
-		get_space()->area_add_to_moved_list(&moved_list);
-	}
 }
 
 void GodotArea3D::set_area_monitor_callback(const Callable &p_callback) {
@@ -110,10 +106,6 @@ void GodotArea3D::set_area_monitor_callback(const Callable &p_callback) {
 	monitored_areas.clear();
 
 	_shape_changed();
-
-	if (!moved_list.in_list() && get_space()) {
-		get_space()->area_add_to_moved_list(&moved_list);
-	}
 }
 
 void GodotArea3D::_set_space_override_mode(PhysicsServer3D::AreaSpaceOverrideMode &r_mode, PhysicsServer3D::AreaSpaceOverrideMode p_new_mode) {

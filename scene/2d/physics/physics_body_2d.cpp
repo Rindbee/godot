@@ -45,7 +45,6 @@ void PhysicsBody2D::_bind_methods() {
 PhysicsBody2D::PhysicsBody2D(PhysicsServer2D::BodyMode p_mode) :
 		CollisionObject2D(PhysicsServer2D::get_singleton()->body_create(), false) {
 	set_body_mode(p_mode);
-	set_pickable(false);
 }
 
 PhysicsBody2D::~PhysicsBody2D() {
