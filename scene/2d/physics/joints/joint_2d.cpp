@@ -117,8 +117,12 @@ void Joint2D::_update_joint(bool p_only_free) {
 	ba = body_a->get_rid();
 	bb = body_b->get_rid();
 
-	body_a->connect(SceneStringNames::get_singleton()->tree_exiting, callable_mp(this, &Joint2D::_body_exit_tree));
-	body_b->connect(SceneStringNames::get_singleton()->tree_exiting, callable_mp(this, &Joint2D::_body_exit_tree));
+	if (!body_a->is_connected(SceneStringNames::get_singleton()->tree_exiting, callable_mp(this, &Joint2D::_body_exit_tree))) {
+		body_a->connect(SceneStringNames::get_singleton()->tree_exiting, callable_mp(this, &Joint2D::_body_exit_tree));
+	}
+	if (!body_b->is_connected(SceneStringNames::get_singleton()->tree_exiting, callable_mp(this, &Joint2D::_body_exit_tree))) {
+		body_b->connect(SceneStringNames::get_singleton()->tree_exiting, callable_mp(this, &Joint2D::_body_exit_tree));
+	}
 
 	PhysicsServer2D::get_singleton()->joint_disable_collisions_between_bodies(joint, exclude_from_collision);
 }
@@ -133,13 +137,8 @@ void Joint2D::set_node_a(const NodePath &p_node_a) {
 	}
 
 	a = p_node_a;
-	if (Engine::get_singleton()->is_editor_hint()) {
-		// When in editor, the setter may be called as a result of node rename.
-		// It happens before the node actually changes its name, which triggers false warning.
-		callable_mp(this, &Joint2D::_update_joint).call_deferred();
-	} else {
-		_update_joint();
-	}
+
+	_update_joint();
 }
 
 NodePath Joint2D::get_node_a() const {
@@ -156,11 +155,8 @@ void Joint2D::set_node_b(const NodePath &p_node_b) {
 	}
 
 	b = p_node_b;
-	if (Engine::get_singleton()->is_editor_hint()) {
-		callable_mp(this, &Joint2D::_update_joint).call_deferred();
-	} else {
-		_update_joint();
-	}
+
+	_update_joint();
 }
 
 NodePath Joint2D::get_node_b() const {

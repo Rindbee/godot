@@ -108,12 +108,16 @@ void Joint3D::_update_joint(bool p_only_free) {
 
 	if (body_a) {
 		ba = body_a->get_rid();
-		body_a->connect(SceneStringNames::get_singleton()->tree_exiting, callable_mp(this, &Joint3D::_body_exit_tree));
+		if (!body_a->is_connected(SceneStringNames::get_singleton()->tree_exiting, callable_mp(this, &Joint3D::_body_exit_tree))) {
+			body_a->connect(SceneStringNames::get_singleton()->tree_exiting, callable_mp(this, &Joint3D::_body_exit_tree));
+		}
 	}
 
 	if (body_b) {
 		bb = body_b->get_rid();
-		body_b->connect(SceneStringNames::get_singleton()->tree_exiting, callable_mp(this, &Joint3D::_body_exit_tree));
+		if (!body_b->is_connected(SceneStringNames::get_singleton()->tree_exiting, callable_mp(this, &Joint3D::_body_exit_tree))) {
+			body_b->connect(SceneStringNames::get_singleton()->tree_exiting, callable_mp(this, &Joint3D::_body_exit_tree));
+		}
 	}
 
 	PhysicsServer3D::get_singleton()->joint_disable_collisions_between_bodies(joint, exclude_from_collision);
