@@ -1035,7 +1035,6 @@ void EditorNode::_fs_changed() {
 
 void EditorNode::_resources_reimported(const Vector<String> &p_resources) {
 	List<String> scenes;
-	int current_tab = scene_tabs->get_current_tab();
 
 	for (int i = 0; i < p_resources.size(); i++) {
 		String file_type = ResourceLoader::get_resource_type(p_resources[i]);
@@ -1066,8 +1065,6 @@ void EditorNode::_resources_reimported(const Vector<String> &p_resources) {
 		reload_scene(E);
 		reload_instances_with_path_in_edited_scenes(E);
 	}
-
-	_set_current_scene_nocheck(current_tab);
 }
 
 void EditorNode::_sources_changed(bool p_exist) {
@@ -6087,6 +6084,9 @@ void EditorNode::reload_instances_with_path_in_edited_scenes(const String &p_ins
 
 		original_edited_scene_root = editor_data.get_edited_scene_root();
 		scene_root->add_child(original_edited_scene_root);
+
+		// Reset the edited scene root which may have been changed when reloading a inherited scene.
+		get_tree()->set_edited_scene_root(original_edited_scene_root);
 
 		editor_data.restore_edited_scene_state(editor_selection, &editor_history);
 	}
