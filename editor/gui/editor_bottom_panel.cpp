@@ -167,7 +167,7 @@ Button *EditorBottomPanel::add_item(String p_text, Control *p_item, const Ref<Sh
 	tb->set_text(p_text);
 	tb->set_shortcut(p_shortcut);
 	tb->set_toggle_mode(true);
-	tb->set_focus_mode(Control::FOCUS_NONE);
+	tb->set_focus_mode(Control::FOCUS_NON_CLICK);
 	item_vbox->add_child(p_item);
 
 	bottom_hbox->move_to_front();
@@ -280,6 +280,7 @@ EditorBottomPanel::EditorBottomPanel() {
 	bottom_hbox->add_child(pin_button);
 	pin_button->hide();
 	pin_button->set_theme_type_variation("FlatMenuButton");
+	pin_button->set_focus_mode(FOCUS_NON_CLICK);
 	pin_button->set_toggle_mode(true);
 	pin_button->set_tooltip_text(TTR("Pin Bottom Panel Switching"));
 	pin_button->connect(SceneStringName(toggled), callable_mp(this, &EditorBottomPanel::_pin_button_toggled));
@@ -288,6 +289,7 @@ EditorBottomPanel::EditorBottomPanel() {
 	bottom_hbox->add_child(expand_button);
 	expand_button->hide();
 	expand_button->set_theme_type_variation("FlatMenuButton");
+	expand_button->set_focus_mode(FOCUS_NON_CLICK);
 	expand_button->set_toggle_mode(true);
 	expand_button->set_shortcut(ED_SHORTCUT_AND_COMMAND("editor/bottom_panel_expand", TTRC("Expand Bottom Panel"), KeyModifierMask::SHIFT | Key::F12));
 	expand_button->connect(SceneStringName(toggled), callable_mp(this, &EditorBottomPanel::_expand_button_toggled));

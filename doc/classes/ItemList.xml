@@ -398,7 +398,7 @@
 			The size all icons will be adjusted to.
 			If either X or Y component is not greater than zero, icon size won't be affected.
 		</member>
-		<member name="focus_mode" type="int" setter="set_focus_mode" getter="get_focus_mode" overrides="Control" enum="Control.FocusMode" default="2" />
+		<member name="focus_mode" type="int" setter="set_focus_mode" getter="get_focus_mode" overrides="Control" enum="Control.FocusMode" default="3" />
 		<member name="icon_mode" type="int" setter="set_icon_mode" getter="get_icon_mode" enum="ItemList.IconMode" default="1">
 			The icon position, whether above or to the left of the text. See the [enum IconMode] constants.
 		</member>

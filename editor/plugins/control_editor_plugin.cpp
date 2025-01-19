@@ -533,7 +533,7 @@ void ControlEditorPopupButton::_notification(int p_what) {
 ControlEditorPopupButton::ControlEditorPopupButton() {
 	set_theme_type_variation(SceneStringName(FlatButton));
 	set_toggle_mode(true);
-	set_focus_mode(FOCUS_NONE);
+	set_focus_mode(FOCUS_NON_CLICK);
 
 	popup_panel = memnew(PopupPanel);
 	add_child(popup_panel);

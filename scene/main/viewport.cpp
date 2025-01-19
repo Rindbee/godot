@@ -1825,7 +1825,7 @@ void Viewport::_gui_input_event(Ref<InputEvent> p_event) {
 				while (ci) {
 					Control *control = Object::cast_to<Control>(ci);
 					if (control) {
-						if (control->get_focus_mode() != Control::FOCUS_NONE) {
+						if (control->get_focus_mode() & Control::FOCUS_CLICK) {
 							// Grabbing unhovered focus can cause issues when mouse is dragged
 							// with another button held down.
 							if (control != gui.key_focus && gui.mouse_over_hierarchy.has(control)) {

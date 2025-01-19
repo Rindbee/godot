@@ -2018,7 +2018,7 @@ void ColorPicker::set_can_add_swatches(bool p_enabled) {
 	can_add_swatches = p_enabled;
 	if (!p_enabled) {
 		btn_add_preset->set_disabled(true);
-		btn_add_preset->set_focus_mode(FOCUS_NONE);
+		btn_add_preset->set_focus_mode(FOCUS_NON_CLICK);
 	} else {
 		btn_add_preset->set_disabled(false);
 		btn_add_preset->set_focus_mode(FOCUS_ALL);
@@ -2242,7 +2242,7 @@ ColorPicker::ColorPicker() {
 	for (int i = 0; i < MODE_BUTTON_COUNT; i++) {
 		mode_btns[i] = memnew(Button);
 		mode_hbc->add_child(mode_btns[i]);
-		mode_btns[i]->set_focus_mode(FOCUS_NONE);
+		mode_btns[i]->set_focus_mode(FOCUS_NON_CLICK);
 		mode_btns[i]->set_h_size_flags(SIZE_EXPAND_FILL);
 		mode_btns[i]->set_toggle_mode(true);
 		mode_btns[i]->set_text(modes[i]->get_name());
@@ -2366,7 +2366,7 @@ ColorPicker::ColorPicker() {
 	btn_preset->set_text("Swatches");
 	btn_preset->set_flat(true);
 	btn_preset->set_toggle_mode(true);
-	btn_preset->set_focus_mode(FOCUS_NONE);
+	btn_preset->set_focus_mode(FOCUS_NON_CLICK);
 	btn_preset->set_text_alignment(HORIZONTAL_ALIGNMENT_LEFT);
 	btn_preset->connect(SceneStringName(toggled), callable_mp(this, &ColorPicker::_show_hide_preset).bind(btn_preset, preset_container));
 	palette_box->add_child(btn_preset);
@@ -2378,7 +2378,7 @@ ColorPicker::ColorPicker() {
 	menu_btn = memnew(Button);
 	menu_btn->set_flat(true);
 	menu_btn->set_tooltip_text(ETR("Show all options available."));
-	menu_btn->set_focus_mode(FOCUS_NONE);
+	menu_btn->set_focus_mode(FOCUS_NON_CLICK);
 	menu_btn->connect(SceneStringName(pressed), callable_mp(this, &ColorPicker::_update_menu));
 	palette_box->add_child(menu_btn);
 
@@ -2398,7 +2398,7 @@ ColorPicker::ColorPicker() {
 	btn_recent_preset = memnew(Button(ETR("Recent Colors")));
 	btn_recent_preset->set_flat(true);
 	btn_recent_preset->set_toggle_mode(true);
-	btn_recent_preset->set_focus_mode(FOCUS_NONE);
+	btn_recent_preset->set_focus_mode(FOCUS_NON_CLICK);
 	btn_recent_preset->set_text_alignment(HORIZONTAL_ALIGNMENT_LEFT);
 	btn_recent_preset->connect(SceneStringName(toggled), callable_mp(this, &ColorPicker::_show_hide_preset).bind(btn_recent_preset, recent_preset_hbc));
 	real_vbox->add_child(btn_recent_preset);

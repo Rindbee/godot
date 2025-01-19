@@ -755,7 +755,7 @@ void EditorThemeManager::_populate_standard_styles(const Ref<EditorTheme> &p_the
 		p_theme->set_stylebox(CoreStringName(normal), "MenuButton", p_config.panel_container_style);
 		p_theme->set_stylebox(SceneStringName(hover), "MenuButton", p_config.button_style_hover);
 		p_theme->set_stylebox(SceneStringName(pressed), "MenuButton", p_config.panel_container_style);
-		p_theme->set_stylebox("focus", "MenuButton", p_config.panel_container_style);
+		p_theme->set_stylebox("focus", "MenuButton", p_config.button_style_focus);
 		p_theme->set_stylebox("disabled", "MenuButton", p_config.panel_container_style);
 
 		p_theme->set_color(SceneStringName(font_color), "MenuButton", p_config.font_color);

@@ -841,6 +841,7 @@ GroupsEditor::GroupsEditor() {
 
 	add = memnew(Button);
 	add->set_theme_type_variation("FlatMenuButton");
+	add->set_focus_mode(FOCUS_NON_CLICK);
 	add->set_tooltip_text(TTR("Add a new group."));
 	add->connect(SceneStringName(pressed), callable_mp(this, &GroupsEditor::_show_add_group_dialog));
 	hbc->add_child(add);

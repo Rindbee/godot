@@ -694,7 +694,7 @@ Path2DEditor::Path2DEditor() {
 	curve_edit->set_theme_type_variation(SceneStringName(FlatButton));
 	curve_edit->set_toggle_mode(true);
 	curve_edit->set_pressed(true);
-	curve_edit->set_focus_mode(Control::FOCUS_NONE);
+	curve_edit->set_focus_mode(Control::FOCUS_NON_CLICK);
 	curve_edit->set_tooltip_text(TTR("Select Points") + "\n" + TTR("Shift+Drag: Select Control Points") + "\n" + keycode_get_string((Key)KeyModifierMask::CMD_OR_CTRL) + TTR("Click: Add Point") + "\n" + TTR("Left Click: Split Segment (in curve)") + "\n" + TTR("Right Click: Delete Point"));
 	curve_edit->connect(SceneStringName(pressed), callable_mp(this, &Path2DEditor::_mode_selected).bind(MODE_EDIT));
 	toolbar->add_child(curve_edit);
@@ -702,7 +702,7 @@ Path2DEditor::Path2DEditor() {
 	curve_edit_curve = memnew(Button);
 	curve_edit_curve->set_theme_type_variation(SceneStringName(FlatButton));
 	curve_edit_curve->set_toggle_mode(true);
-	curve_edit_curve->set_focus_mode(Control::FOCUS_NONE);
+	curve_edit_curve->set_focus_mode(Control::FOCUS_NON_CLICK);
 	curve_edit_curve->set_tooltip_text(TTR("Select Control Points (Shift+Drag)"));
 	curve_edit_curve->connect(SceneStringName(pressed), callable_mp(this, &Path2DEditor::_mode_selected).bind(MODE_EDIT_CURVE));
 	toolbar->add_child(curve_edit_curve);
@@ -710,7 +710,7 @@ Path2DEditor::Path2DEditor() {
 	curve_create = memnew(Button);
 	curve_create->set_theme_type_variation(SceneStringName(FlatButton));
 	curve_create->set_toggle_mode(true);
-	curve_create->set_focus_mode(Control::FOCUS_NONE);
+	curve_create->set_focus_mode(Control::FOCUS_NON_CLICK);
 	curve_create->set_tooltip_text(TTR("Add Point (in empty space)") + "\n" + TTR("Right Click: Delete Point"));
 	curve_create->connect(SceneStringName(pressed), callable_mp(this, &Path2DEditor::_mode_selected).bind(MODE_CREATE));
 	toolbar->add_child(curve_create);
@@ -718,21 +718,21 @@ Path2DEditor::Path2DEditor() {
 	curve_del = memnew(Button);
 	curve_del->set_theme_type_variation(SceneStringName(FlatButton));
 	curve_del->set_toggle_mode(true);
-	curve_del->set_focus_mode(Control::FOCUS_NONE);
+	curve_del->set_focus_mode(Control::FOCUS_NON_CLICK);
 	curve_del->set_tooltip_text(TTR("Delete Point"));
 	curve_del->connect(SceneStringName(pressed), callable_mp(this, &Path2DEditor::_mode_selected).bind(MODE_DELETE));
 	toolbar->add_child(curve_del);
 
 	curve_close = memnew(Button);
 	curve_close->set_theme_type_variation(SceneStringName(FlatButton));
-	curve_close->set_focus_mode(Control::FOCUS_NONE);
+	curve_close->set_focus_mode(Control::FOCUS_NON_CLICK);
 	curve_close->set_tooltip_text(TTR("Close Curve"));
 	curve_close->connect(SceneStringName(pressed), callable_mp(this, &Path2DEditor::_mode_selected).bind(MODE_CLOSE));
 	toolbar->add_child(curve_close);
 
 	curve_clear_points = memnew(Button);
 	curve_clear_points->set_theme_type_variation(SceneStringName(FlatButton));
-	curve_clear_points->set_focus_mode(Control::FOCUS_NONE);
+	curve_clear_points->set_focus_mode(Control::FOCUS_NON_CLICK);
 	curve_clear_points->set_tooltip_text(TTR("Clear Points"));
 	curve_clear_points->connect(SceneStringName(pressed), callable_mp(this, &Path2DEditor::_confirm_clear_points));
 	toolbar->add_child(curve_clear_points);

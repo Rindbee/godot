@@ -218,7 +218,7 @@ MenuButton::MenuButton(const String &p_text) :
 	set_toggle_mode(true);
 	set_disable_shortcuts(false);
 	set_process_shortcut_input(true);
-	set_focus_mode(FOCUS_NONE);
+	set_focus_mode(FOCUS_NON_CLICK);
 	set_action_mode(ACTION_MODE_BUTTON_PRESS);
 
 	popup = memnew(PopupMenu);

@@ -63,9 +63,11 @@ public:
 	};
 
 	enum FocusMode {
-		FOCUS_NONE,
-		FOCUS_CLICK,
-		FOCUS_ALL
+		FOCUS_NONE = 0,
+		FOCUS_CLICK = 1,
+		FOCUS_NON_CLICK = 2,
+
+		FOCUS_ALL = FOCUS_CLICK | FOCUS_NON_CLICK
 	};
 
 	enum SizeFlags {

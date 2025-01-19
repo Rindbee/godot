@@ -118,7 +118,7 @@ ScrollContainer *EditorAbout::_populate_list(const String &p_name, const List<St
 			il->set_same_column_width(true);
 			il->set_auto_height(true);
 			il->set_mouse_filter(Control::MOUSE_FILTER_IGNORE);
-			il->set_focus_mode(Control::FOCUS_NONE);
+			il->set_focus_mode(Control::FOCUS_NON_CLICK);
 			il->add_theme_constant_override("h_separation", 16 * EDSCALE);
 			if (p_allow_website) {
 				il->set_focus_mode(Control::FOCUS_CLICK);

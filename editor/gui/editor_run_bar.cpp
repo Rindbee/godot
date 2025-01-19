@@ -498,7 +498,7 @@ EditorRunBar::EditorRunBar() {
 	// Use a button for the indicator since it comes with a background panel and pixel perfect centering of an icon.
 	profiler_autostart_indicator = memnew(Button);
 	profiler_autostart_indicator->set_icon_alignment(HORIZONTAL_ALIGNMENT_CENTER);
-	profiler_autostart_indicator->set_focus_mode(FOCUS_NONE);
+	profiler_autostart_indicator->set_focus_mode(FOCUS_NON_CLICK);
 	profiler_autostart_indicator->set_theme_type_variation("ProfilerAutostartIndicator");
 	profiler_autostart_indicator->connect(SceneStringName(pressed), callable_mp(this, &EditorRunBar::_profiler_autostart_indicator_pressed));
 	outer_hbox->add_child(profiler_autostart_indicator);
@@ -528,7 +528,7 @@ EditorRunBar::EditorRunBar() {
 		recovery_mode_reload_button = memnew(Button);
 		main_hbox->add_child(recovery_mode_reload_button);
 		recovery_mode_reload_button->set_theme_type_variation("RunBarButton");
-		recovery_mode_reload_button->set_focus_mode(Control::FOCUS_NONE);
+		recovery_mode_reload_button->set_focus_mode(Control::FOCUS_NON_CLICK);
 		recovery_mode_reload_button->set_tooltip_text(TTR("Disable recovery mode and reload the project."));
 		recovery_mode_reload_button->connect(SceneStringName(pressed), callable_mp(this, &EditorRunBar::recovery_mode_reload_project));
 
@@ -538,7 +538,7 @@ EditorRunBar::EditorRunBar() {
 		recovery_mode_button = memnew(Button);
 		recovery_mode_panel->add_child(recovery_mode_button);
 		recovery_mode_button->set_theme_type_variation("RunBarButton");
-		recovery_mode_button->set_focus_mode(Control::FOCUS_NONE);
+		recovery_mode_button->set_focus_mode(Control::FOCUS_NON_CLICK);
 		recovery_mode_button->set_text(TTR("Recovery Mode"));
 		recovery_mode_button->set_tooltip_text(TTR("Recovery Mode is enabled. Click for more details."));
 		recovery_mode_button->connect(SceneStringName(pressed), callable_mp(this, &EditorRunBar::recovery_mode_show_dialog));
@@ -550,7 +550,7 @@ EditorRunBar::EditorRunBar() {
 	main_hbox->add_child(play_button);
 	play_button->set_theme_type_variation("RunBarButton");
 	play_button->set_toggle_mode(true);
-	play_button->set_focus_mode(Control::FOCUS_NONE);
+	play_button->set_focus_mode(Control::FOCUS_NON_CLICK);
 	play_button->set_tooltip_text(TTRC("Run the project's default scene."));
 	play_button->connect(SceneStringName(pressed), callable_mp(this, &EditorRunBar::play_main_scene).bind(false));
 
@@ -562,7 +562,7 @@ EditorRunBar::EditorRunBar() {
 	main_hbox->add_child(pause_button);
 	pause_button->set_theme_type_variation("RunBarButton");
 	pause_button->set_toggle_mode(true);
-	pause_button->set_focus_mode(Control::FOCUS_NONE);
+	pause_button->set_focus_mode(Control::FOCUS_NON_CLICK);
 	pause_button->set_tooltip_text(TTRC("Pause the running project's execution for debugging."));
 	pause_button->set_disabled(true);
 
@@ -573,7 +573,7 @@ EditorRunBar::EditorRunBar() {
 	stop_button = memnew(Button);
 	main_hbox->add_child(stop_button);
 	stop_button->set_theme_type_variation("RunBarButton");
-	stop_button->set_focus_mode(Control::FOCUS_NONE);
+	stop_button->set_focus_mode(Control::FOCUS_NON_CLICK);
 	stop_button->set_tooltip_text(TTRC("Stop the currently running project."));
 	stop_button->set_disabled(true);
 	stop_button->connect(SceneStringName(pressed), callable_mp(this, &EditorRunBar::stop_playing));
@@ -612,7 +612,7 @@ EditorRunBar::EditorRunBar() {
 	}
 	main_hbox->add_child(play_scene_button);
 	play_scene_button->set_theme_type_variation("RunBarButton");
-	play_scene_button->set_focus_mode(Control::FOCUS_NONE);
+	play_scene_button->set_focus_mode(Control::FOCUS_NON_CLICK);
 	play_scene_button->set_tooltip_text(TTRC("Run the currently edited scene."));
 
 	ED_SHORTCUT_AND_COMMAND("editor/run_current_scene", TTRC("Run Current Scene"), Key::F6);
@@ -633,7 +633,7 @@ EditorRunBar::EditorRunBar() {
 	}
 	main_hbox->add_child(play_custom_scene_button);
 	play_custom_scene_button->set_theme_type_variation("RunBarButton");
-	play_custom_scene_button->set_focus_mode(Control::FOCUS_NONE);
+	play_custom_scene_button->set_focus_mode(Control::FOCUS_NON_CLICK);
 	play_custom_scene_button->set_tooltip_text(TTRC("Run a specific scene."));
 
 	ED_SHORTCUT_AND_COMMAND("editor/run_specific_scene", TTRC("Run Specific Scene"), KeyModifierMask::CTRL | KeyModifierMask::SHIFT | Key::F5);
@@ -648,7 +648,7 @@ EditorRunBar::EditorRunBar() {
 	write_movie_button->set_theme_type_variation("RunBarButton");
 	write_movie_button->set_toggle_mode(true);
 	write_movie_button->set_pressed(false);
-	write_movie_button->set_focus_mode(Control::FOCUS_NONE);
+	write_movie_button->set_focus_mode(Control::FOCUS_NON_CLICK);
 	write_movie_button->set_tooltip_text(TTR("Enable Movie Maker mode.\nThe project will run at stable FPS and the visual and audio output will be recorded to a video file."));
 	write_movie_button->connect(SceneStringName(toggled), callable_mp(this, &EditorRunBar::_write_movie_toggled));
 }

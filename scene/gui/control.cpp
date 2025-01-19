@@ -2000,7 +2000,7 @@ bool Control::is_drag_successful() const {
 
 void Control::set_focus_mode(FocusMode p_focus_mode) {
 	ERR_MAIN_THREAD_GUARD;
-	ERR_FAIL_INDEX((int)p_focus_mode, 3);
+	ERR_FAIL_INDEX((int)p_focus_mode, (int)FOCUS_ALL + 1);
 
 	if (is_inside_tree() && p_focus_mode == FOCUS_NONE && data.focus_mode != FOCUS_NONE && has_focus()) {
 		release_focus();
@@ -2087,7 +2087,7 @@ Control *Control::find_next_valid_focus() const {
 			ERR_FAIL_NULL_V_MSG(n, nullptr, "Next focus node path is invalid: '" + data.focus_next + "'.");
 			Control *c = Object::cast_to<Control>(n);
 			ERR_FAIL_NULL_V_MSG(c, nullptr, "Next focus node is not a control: '" + n->get_name() + "'.");
-			if (c->is_visible() && c->get_focus_mode() != FOCUS_NONE) {
+			if (c->is_visible() && (c->data.focus_mode & FOCUS_NON_CLICK)) {
 				return c;
 			}
 		}
@@ -2127,10 +2127,10 @@ Control *Control::find_next_valid_focus() const {
 		}
 
 		if (next_child == from || next_child == this) { // No next control.
-			return (get_focus_mode() == FOCUS_ALL) ? next_child : nullptr;
+			return (data.focus_mode & FOCUS_NON_CLICK) ? next_child : nullptr;
 		}
 		if (next_child) {
-			if (next_child->get_focus_mode() == FOCUS_ALL) {
+			if (next_child->data.focus_mode & FOCUS_NON_CLICK) {
 				return next_child;
 			}
 			from = next_child;
@@ -2174,7 +2174,7 @@ Control *Control::find_prev_valid_focus() const {
 			ERR_FAIL_NULL_V_MSG(n, nullptr, "Previous focus node path is invalid: '" + data.focus_prev + "'.");
 			Control *c = Object::cast_to<Control>(n);
 			ERR_FAIL_NULL_V_MSG(c, nullptr, "Previous focus node is not a control: '" + n->get_name() + "'.");
-			if (c->is_visible() && c->get_focus_mode() != FOCUS_NONE) {
+			if (c->is_visible() && (c->data.focus_mode & FOCUS_NON_CLICK)) {
 				return c;
 			}
 		}
@@ -2208,10 +2208,10 @@ Control *Control::find_prev_valid_focus() const {
 		}
 
 		if (prev_child == from || prev_child == this) { // No prev control.
-			return (get_focus_mode() == FOCUS_ALL) ? prev_child : nullptr;
+			return (prev_child->data.focus_mode & FOCUS_NON_CLICK) ? prev_child : nullptr;
 		}
 
-		if (prev_child->get_focus_mode() == FOCUS_ALL) {
+		if (prev_child->data.focus_mode & FOCUS_NON_CLICK) {
 			return prev_child;
 		}
 
@@ -2270,7 +2270,7 @@ Control *Control::_get_focus_neighbor(Side p_side, int p_count) {
 		if (!c->is_visible()) {
 			valid = false;
 		}
-		if (c->get_focus_mode() == FOCUS_NONE) {
+		if (!(c->data.focus_mode & FOCUS_NON_CLICK)) {
 			valid = false;
 		}
 		if (valid) {
@@ -2343,7 +2343,7 @@ void Control::_window_find_focus_neighbor(const Vector2 &p_dir, Node *p_at, cons
 
 	Control *c = Object::cast_to<Control>(p_at);
 
-	if (c && c != this && c->get_focus_mode() == FOCUS_ALL && c->is_visible_in_tree()) {
+	if (c && c != this && (c->data.focus_mode & FOCUS_NON_CLICK) && c->is_visible_in_tree()) {
 		Point2 points[4];
 
 		Transform2D xform = c->get_global_transform();
@@ -3643,7 +3643,7 @@ void Control::_bind_methods() {
 	ADD_PROPERTYI(PropertyInfo(Variant::NODE_PATH, "focus_neighbor_bottom", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Control"), "set_focus_neighbor", "get_focus_neighbor", SIDE_BOTTOM);
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "focus_next", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Control"), "set_focus_next", "get_focus_next");
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "focus_previous", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Control"), "set_focus_previous", "get_focus_previous");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "focus_mode", PROPERTY_HINT_ENUM, "None,Click,All"), "set_focus_mode", "get_focus_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "focus_mode", PROPERTY_HINT_ENUM, "None,Click,Non-Click,All"), "set_focus_mode", "get_focus_mode");
 
 	ADD_GROUP("Mouse", "mouse_");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "mouse_filter", PROPERTY_HINT_ENUM, "Stop,Pass (Propagate Up),Ignore"), "set_mouse_filter", "get_mouse_filter");
@@ -3659,6 +3659,7 @@ void Control::_bind_methods() {
 
 	BIND_ENUM_CONSTANT(FOCUS_NONE);
 	BIND_ENUM_CONSTANT(FOCUS_CLICK);
+	BIND_ENUM_CONSTANT(FOCUS_NON_CLICK);
 	BIND_ENUM_CONSTANT(FOCUS_ALL);
 
 	BIND_CONSTANT(NOTIFICATION_RESIZED);

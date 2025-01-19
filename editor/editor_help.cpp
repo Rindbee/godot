@@ -4593,13 +4593,13 @@ FindBar::FindBar() {
 	find_prev = memnew(Button);
 	find_prev->set_flat(true);
 	add_child(find_prev);
-	find_prev->set_focus_mode(FOCUS_NONE);
+	find_prev->set_focus_mode(FOCUS_NON_CLICK);
 	find_prev->connect(SceneStringName(pressed), callable_mp(this, &FindBar::search_prev));
 
 	find_next = memnew(Button);
 	find_next->set_flat(true);
 	add_child(find_next);
-	find_next->set_focus_mode(FOCUS_NONE);
+	find_next->set_focus_mode(FOCUS_NON_CLICK);
 	find_next->connect(SceneStringName(pressed), callable_mp(this, &FindBar::search_next));
 
 	Control *space = memnew(Control);
@@ -4608,7 +4608,7 @@ FindBar::FindBar() {
 
 	hide_button = memnew(TextureButton);
 	add_child(hide_button);
-	hide_button->set_focus_mode(FOCUS_NONE);
+	hide_button->set_focus_mode(FOCUS_NON_CLICK);
 	hide_button->set_ignore_texture_size(true);
 	hide_button->set_stretch_mode(TextureButton::STRETCH_KEEP_CENTERED);
 	hide_button->connect(SceneStringName(pressed), callable_mp(this, &FindBar::_hide_bar));

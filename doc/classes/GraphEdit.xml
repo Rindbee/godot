@@ -325,7 +325,7 @@
 			[/codeblock]
 			Connections with [code]keep_alive[/code] set to [code]false[/code] may be deleted automatically if invalid during a redraw.
 		</member>
-		<member name="focus_mode" type="int" setter="set_focus_mode" getter="get_focus_mode" overrides="Control" enum="Control.FocusMode" default="2" />
+		<member name="focus_mode" type="int" setter="set_focus_mode" getter="get_focus_mode" overrides="Control" enum="Control.FocusMode" default="3" />
 		<member name="grid_pattern" type="int" setter="set_grid_pattern" getter="get_grid_pattern" enum="GraphEdit.GridPattern" default="0">
 			The pattern used for drawing the grid.
 		</member>

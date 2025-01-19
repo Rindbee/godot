@@ -4078,14 +4078,14 @@ FileSystemDock::FileSystemDock() {
 	button_hist_prev = memnew(Button);
 	button_hist_prev->set_flat(true);
 	button_hist_prev->set_disabled(true);
-	button_hist_prev->set_focus_mode(FOCUS_NONE);
+	button_hist_prev->set_focus_mode(FOCUS_NON_CLICK);
 	button_hist_prev->set_tooltip_text(TTR("Go to previous selected folder/file."));
 	nav_hbc->add_child(button_hist_prev);
 
 	button_hist_next = memnew(Button);
 	button_hist_next->set_flat(true);
 	button_hist_next->set_disabled(true);
-	button_hist_next->set_focus_mode(FOCUS_NONE);
+	button_hist_next->set_focus_mode(FOCUS_NON_CLICK);
 	button_hist_next->set_tooltip_text(TTR("Go to next selected folder/file."));
 	nav_hbc->add_child(button_hist_next);
 
@@ -4097,20 +4097,21 @@ FileSystemDock::FileSystemDock() {
 
 	button_reload = memnew(Button);
 	button_reload->connect(SceneStringName(pressed), callable_mp(this, &FileSystemDock::_rescan));
-	button_reload->set_focus_mode(FOCUS_NONE);
+	button_reload->set_focus_mode(FOCUS_NON_CLICK);
 	button_reload->set_tooltip_text(TTR("Re-Scan Filesystem"));
 	button_reload->hide();
 	toolbar_hbc->add_child(button_reload);
 
 	button_toggle_display_mode = memnew(Button);
 	button_toggle_display_mode->connect(SceneStringName(pressed), callable_mp(this, &FileSystemDock::_change_split_mode));
-	button_toggle_display_mode->set_focus_mode(FOCUS_NONE);
+	button_toggle_display_mode->set_focus_mode(FOCUS_NON_CLICK);
 	button_toggle_display_mode->set_tooltip_text(TTR("Change Split Mode"));
 	button_toggle_display_mode->set_theme_type_variation("FlatMenuButton");
 	toolbar_hbc->add_child(button_toggle_display_mode);
 
 	button_dock_placement = memnew(Button);
 	button_dock_placement->set_theme_type_variation("FlatMenuButton");
+	button_dock_placement->set_focus_mode(FOCUS_NON_CLICK);
 	button_dock_placement->connect(SceneStringName(pressed), callable_mp(this, &FileSystemDock::_change_bottom_dock_placement));
 	button_dock_placement->hide();
 	toolbar_hbc->add_child(button_dock_placement);
@@ -4182,6 +4183,7 @@ FileSystemDock::FileSystemDock() {
 
 	button_file_list_display_mode = memnew(Button);
 	button_file_list_display_mode->set_theme_type_variation("FlatMenuButton");
+	button_file_list_display_mode->set_focus_mode(FOCUS_NON_CLICK);
 	path_hb->add_child(button_file_list_display_mode);
 
 	files = memnew(FileSystemList);

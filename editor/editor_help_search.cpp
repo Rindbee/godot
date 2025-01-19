@@ -341,7 +341,7 @@ EditorHelpSearch::EditorHelpSearch() {
 	case_sensitive_button->set_tooltip_text(TTR("Case Sensitive"));
 	case_sensitive_button->connect(SceneStringName(pressed), callable_mp(this, &EditorHelpSearch::_update_results));
 	case_sensitive_button->set_toggle_mode(true);
-	case_sensitive_button->set_focus_mode(Control::FOCUS_NONE);
+	case_sensitive_button->set_focus_mode(Control::FOCUS_NON_CLICK);
 	hbox->add_child(case_sensitive_button);
 
 	hierarchy_button = memnew(Button);
@@ -350,7 +350,7 @@ EditorHelpSearch::EditorHelpSearch() {
 	hierarchy_button->connect(SceneStringName(pressed), callable_mp(this, &EditorHelpSearch::_update_results));
 	hierarchy_button->set_toggle_mode(true);
 	hierarchy_button->set_pressed(true);
-	hierarchy_button->set_focus_mode(Control::FOCUS_NONE);
+	hierarchy_button->set_focus_mode(Control::FOCUS_NON_CLICK);
 	hbox->add_child(hierarchy_button);
 
 	filter_combo = memnew(OptionButton);
