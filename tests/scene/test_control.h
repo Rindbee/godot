@@ -31,6 +31,8 @@
 #ifndef TEST_CONTROL_H
 #define TEST_CONTROL_H
 
+#include "core/os/memory.h"
+#include "core/string/node_path.h"
 #include "scene/gui/control.h"
 
 #include "tests/test_macros.h"
@@ -107,6 +109,62 @@ TEST_CASE("[SceneTree][Control] Focus") {
 		CHECK_FALSE(ctrl->has_focus());
 
 		memdelete(other_ctrl);
+	}
+
+	SUBCASE("[SceneTree][Control] Hide control will cause the focus to be released") {
+		ctrl->set_focus_mode(Control::FocusMode::FOCUS_ALL);
+		ctrl->grab_focus();
+		CHECK(ctrl->has_focus());
+
+		ctrl->hide();
+		CHECK_FALSE(ctrl->has_focus());
+
+		ctrl->show();
+		CHECK_FALSE(ctrl->has_focus());
+	}
+
+	SUBCASE("[SceneTree][Control] The parent node is hidden causing the focus to be released") {
+		Control *child_ctrl = memnew(Control);
+		ctrl->add_child(child_ctrl);
+
+		child_ctrl->set_focus_mode(Control::FocusMode::FOCUS_ALL);
+		child_ctrl->grab_focus();
+		CHECK(child_ctrl->has_focus());
+
+		ctrl->hide();
+		CHECK_FALSE(child_ctrl->has_focus());
+
+		ctrl->show();
+		CHECK_FALSE(child_ctrl->has_focus());
+
+		memdelete(child_ctrl);
+	}
+
+	memdelete(ctrl);
+}
+
+TEST_CASE("[SceneTree][Control] Find next valid focus") {
+	Control *ctrl = memnew(Control);
+	SceneTree::get_singleton()->get_root()->add_child(ctrl);
+
+	SUBCASE("[SceneTree][Control] Find the manually specified one first") {
+		ctrl->set_focus_mode(Control::FocusMode::FOCUS_ALL);
+
+		Control *other_ctrl = memnew(Control);
+		SceneTree::get_singleton()->get_root()->add_child(other_ctrl);
+		other_ctrl->set_focus_mode(Control::FocusMode::FOCUS_ALL);
+
+		Control *next_ctrl = memnew(Control);
+		SceneTree::get_singleton()->get_root()->add_child(next_ctrl);
+		next_ctrl->set_focus_mode(Control::FocusMode::FOCUS_ALL);
+
+		ctrl->set_focus_next(ctrl->get_path_to(next_ctrl));
+
+		Control *next = ctrl->find_next_valid_focus();
+		CHECK_EQ(next, next_ctrl);
+
+		memdelete(other_ctrl);
+		memdelete(next_ctrl);
 	}
 
 	memdelete(ctrl);
