@@ -51,6 +51,8 @@ private:
 	HScrollBar *h_scroll = nullptr;
 	VScrollBar *v_scroll = nullptr;
 
+	Vector2 scroll_diff;
+
 	mutable Size2 largest_child_min_size; // The largest one among the min sizes of all available child controls.
 
 	void update_scrollbars();
@@ -83,6 +85,8 @@ private:
 	bool draw_focus_border = false;
 	bool focus_border_is_drawn = false;
 	bool child_has_focus();
+
+	Rect2 _get_local_visible_rect() const;
 
 protected:
 	Size2 get_minimum_size() const override;

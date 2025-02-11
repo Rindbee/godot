@@ -101,6 +101,16 @@ bool ScrollContainer::_is_v_scroll_visible() const {
 	return v_scroll->is_visible() && v_scroll->get_parent() == this;
 }
 
+Rect2 ScrollContainer::_get_local_visible_rect() const {
+	const float side_margin = v_scroll->is_visible() ? v_scroll->get_size().x : 0.0f;
+	const float bottom_margin = h_scroll->is_visible() ? h_scroll->get_size().y : 0.0f;
+
+	Point2 origin = Point2(is_layout_rtl() ? side_margin : 0.0f, 0.0f);
+	Size2 size = Size2(get_size().x - side_margin, get_size().y - bottom_margin);
+
+	return Rect2(origin, size);
+}
+
 void ScrollContainer::gui_input(const Ref<InputEvent> &p_gui_input) {
 	ERR_FAIL_COND(p_gui_input.is_null());
 
@@ -292,20 +302,98 @@ void ScrollContainer::_gui_focus_changed(Control *p_control) {
 void ScrollContainer::ensure_control_visible(Control *p_control) {
 	ERR_FAIL_COND_MSG(!is_ancestor_of(p_control), "Must be an ancestor of the control.");
 
-	// Just eliminate the rotation of this ScrollContainer.
-	Transform2D other_in_this = get_global_transform().affine_inverse() * p_control->get_global_transform();
+	// For nested cases, the inner ScrollContainer will first call this method, but the control
+	// will not immediately apply the transformation. Here we need to eliminate the transformation
+	// applied by the inner ScrollContainer to the control.
 
-	Size2 size = get_size();
-	Rect2 other_rect = other_in_this.xform(Rect2(Point2(), p_control->get_size()));
+	scroll_diff = Vector2(); // Clear the cache.
 
-	float side_margin = v_scroll->is_visible() ? v_scroll->get_size().x : 0.0f;
-	float bottom_margin = h_scroll->is_visible() ? h_scroll->get_size().y : 0.0f;
+	Control *target = p_control;
+	Size2 target_size = p_control->get_size();
+	Transform2D target_in_this;
 
-	Vector2 diff = Vector2(MAX(MIN(other_rect.position.x - (is_layout_rtl() ? side_margin : 0.0f), 0.0f), other_rect.position.x + other_rect.size.x - size.x + (!is_layout_rtl() ? side_margin : 0.0f)),
-			MAX(MIN(other_rect.position.y, 0.0f), other_rect.position.y + other_rect.size.y - size.y + bottom_margin));
+	CanvasItem *parent_item = p_control->get_parent_item();
+	while (parent_item) {
+		ScrollContainer *sc = Object::cast_to<ScrollContainer>(parent_item);
+		parent_item = parent_item->get_parent_item();
 
-	set_h_scroll(get_h_scroll() + diff.x);
-	set_v_scroll(get_v_scroll() + diff.y);
+		if (!sc) {
+			continue;
+		}
+
+		// The transformation of the target in sc.
+		target_in_this = (sc->get_global_transform().affine_inverse() * target->get_global_transform()) * target_in_this;
+
+		if (sc == this) {
+			break;
+		}
+
+		target = sc;
+
+		// The translation that will be scrolled by sc.
+		target_in_this = target_in_this.translated(-sc->scroll_diff);
+
+		const Transform2D target_in_this_inv = target_in_this.affine_inverse();
+
+		const Rect2 rect = sc->_get_local_visible_rect();
+
+		// Calculated in the space of the visible area of p_control.
+		const Rect2 other_rect_inv = Rect2(Point2(), target_size);
+		const Rect2 rect_inv = target_in_this_inv.xform(rect);
+
+		if (target_in_this.columns[0].y == 0.0f || target_in_this.columns[0].x == 0.0f) { // No rotation, or rotated 90 degrees.
+			if (!other_rect_inv.intersects(rect_inv)) {
+				ERR_FAIL_MSG("Unable to make the control visible.");
+			}
+
+			target_size = other_rect_inv.intersection(rect_inv).get_size();
+			continue;
+		}
+
+		// In the case of rotation other than 90 degrees.
+
+		const Rect2 other_rect = target_in_this.xform(other_rect_inv);
+
+		if (!sc->follow_focus && (!other_rect_inv.intersects(rect_inv) || !rect.intersects(other_rect))) {
+			ERR_FAIL_MSG("Unable to make the control visible.");
+		}
+
+		Vector2 clamp_diff = rect.intersection(other_rect).position - other_rect.position;
+		target_in_this = target_in_this.translated(clamp_diff); // Translation caused by sc clipping.
+
+		// Calculate target_size in p_control visible space to prevent target_size from growing.
+		target_size = target_size.min(rect_inv.intersection(other_rect_inv).size);
+	}
+
+	// Calculates the amount to scroll in this ScrollContainer.
+
+	const Rect2 visible_rect = _get_local_visible_rect();
+	const Rect2 other_rect = target_in_this.xform(Rect2(Point2(), target_size));
+
+	// In the horizontal direction.
+
+	const float x_left_diff = other_rect.position.x - visible_rect.position.x;
+	const float x_right_diff = (other_rect.position.x + other_rect.size.x) - (visible_rect.position.x + visible_rect.size.x);
+
+	if (visible_rect.size.x > other_rect.size.x) {
+		scroll_diff.x = x_left_diff < 0.0f ? x_left_diff : (x_right_diff > 0.0f ? x_right_diff : 0.0f);
+	} else {
+		scroll_diff.x = x_left_diff > 0.0f ? x_left_diff : (x_right_diff < 0.0f ? x_right_diff : 0.0f);
+	}
+
+	// In the vertical direction.
+
+	const float y_top_diff = other_rect.position.y;
+	const float y_bottom_diff = (other_rect.position.y + other_rect.size.y) - visible_rect.size.y;
+
+	if (visible_rect.size.y > other_rect.size.y) {
+		scroll_diff.y = y_top_diff < 0.0f ? y_top_diff : (y_bottom_diff > 0.0f ? y_bottom_diff : 0.0f);
+	} else {
+		scroll_diff.y = y_top_diff > 0.0f ? y_top_diff : (y_bottom_diff < 0.0f ? y_bottom_diff : 0.0f);
+	}
+
+	set_h_scroll(get_h_scroll() + scroll_diff.x);
+	set_v_scroll(get_v_scroll() + scroll_diff.y);
 }
 
 void ScrollContainer::_reposition_children() {
