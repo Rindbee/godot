@@ -144,6 +144,8 @@ struct [[nodiscard]] Rect2 {
 		return size.x > 0.0f && size.y > 0.0f;
 	}
 
+	Rect2 intersection_transformed(const Transform2D &p_xform, const Rect2 &p_rect) const;
+
 	// Returns the intersection between two Rect2s or an empty Rect2 if there is no intersection.
 	inline Rect2 intersection(const Rect2 &p_rect) const {
 		Rect2 new_rect = p_rect;
