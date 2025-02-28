@@ -60,50 +60,53 @@ void RemoteTransform2D::_update_remote() {
 		return;
 	}
 
-	if (!(update_remote_position || update_remote_rotation || update_remote_scale)) {
+	int update_count = update_remote_rotation + update_remote_scale + update_remote_skew;
+
+	if (update_count == 0 && !update_remote_position) {
 		return; // The transform data of the RemoteTransform2D is not used at all.
 	}
 
-	//todo make faster
-	if (use_global_coordinates) {
-		if (update_remote_position && update_remote_rotation && update_remote_scale) {
+	if (update_count == 3 && update_remote_position) {
+		if (use_global_coordinates) {
 			n->set_global_transform(get_global_transform());
-			return;
+		} else {
+			n->set_transform(get_transform());
 		}
+		return;
+	}
 
-		Transform2D n_trans = n->get_global_transform();
-		Transform2D our_trans = get_global_transform();
+	Transform2D n_trans = use_global_coordinates ? n->get_global_transform() : n->get_transform();
+	Transform2D our_trans = use_global_coordinates ? get_global_transform() : get_transform();
 
-		// There are more steps in the operation of set_rotation, so avoid calling it.
-		Transform2D trans = update_remote_rotation ? our_trans : n_trans;
+	Transform2D &trans = n_trans;
+	Transform2D &other_trans = our_trans;
 
-		if (update_remote_rotation ^ update_remote_position) {
-			trans.set_origin(update_remote_position ? our_trans.get_origin() : n_trans.get_origin());
+	bool need_swap = update_count >= 2;
+	if (need_swap) {
+		trans = our_trans;
+		other_trans = n_trans;
+	}
+
+	if (need_swap ^ update_remote_position) {
+		trans.set_origin(other_trans.get_origin());
+	}
+
+	if (update_count == 1 || update_count == 2) {
+		if (need_swap ^ update_remote_rotation) {
+			// Keep skew.
+			trans.set_rotation_scale_and_skew(other_trans.get_rotation(), trans.get_scale(), trans.get_skew());
+		} else if (need_swap ^ update_remote_scale) {
+			// Faster than set_rotation_scale_and_skew.
+			trans.set_scale(other_trans.get_scale());
+		} else if (need_swap ^ update_remote_skew) {
+			// Slightly faster than set_skew.
+			trans.set_rotation_scale_and_skew(trans.get_rotation(), trans.get_scale(), other_trans.get_skew());
 		}
-		if (update_remote_rotation ^ update_remote_scale) {
-			trans.set_scale(update_remote_scale ? our_trans.get_scale() : n_trans.get_scale());
-		}
+	}
 
+	if (use_global_coordinates) {
 		n->set_global_transform(trans);
 	} else {
-		if (update_remote_position && update_remote_rotation && update_remote_scale) {
-			n->set_transform(get_transform());
-			return;
-		}
-
-		Transform2D n_trans = n->get_transform();
-		Transform2D our_trans = get_transform();
-
-		// There are more steps in the operation of set_rotation, so avoid calling it.
-		Transform2D trans = update_remote_rotation ? our_trans : n_trans;
-
-		if (update_remote_rotation ^ update_remote_position) {
-			trans.set_origin(update_remote_position ? our_trans.get_origin() : n_trans.get_origin());
-		}
-		if (update_remote_rotation ^ update_remote_scale) {
-			trans.set_scale(update_remote_scale ? our_trans.get_scale() : n_trans.get_scale());
-		}
-
 		n->set_transform(trans);
 	}
 }
@@ -206,6 +209,18 @@ bool RemoteTransform2D::get_update_scale() const {
 	return update_remote_scale;
 }
 
+void RemoteTransform2D::set_update_skew(const bool p_update) {
+	if (update_remote_skew == p_update) {
+		return;
+	}
+	update_remote_skew = p_update;
+	_update_remote();
+}
+
+bool RemoteTransform2D::get_update_skew() const {
+	return update_remote_skew;
+}
+
 void RemoteTransform2D::force_update_cache() {
 	_update_cache();
 }
@@ -234,6 +249,8 @@ void RemoteTransform2D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_update_rotation"), &RemoteTransform2D::get_update_rotation);
 	ClassDB::bind_method(D_METHOD("set_update_scale", "update_remote_scale"), &RemoteTransform2D::set_update_scale);
 	ClassDB::bind_method(D_METHOD("get_update_scale"), &RemoteTransform2D::get_update_scale);
+	ClassDB::bind_method(D_METHOD("set_update_skew", "update_remote_skew"), &RemoteTransform2D::set_update_skew);
+	ClassDB::bind_method(D_METHOD("get_update_skew"), &RemoteTransform2D::get_update_skew);
 
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "remote_path", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Node2D"), "set_remote_node", "get_remote_node");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_global_coordinates"), "set_use_global_coordinates", "get_use_global_coordinates");
@@ -242,6 +259,7 @@ void RemoteTransform2D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "update_position"), "set_update_position", "get_update_position");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "update_rotation"), "set_update_rotation", "get_update_rotation");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "update_scale"), "set_update_scale", "get_update_scale");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "update_skew"), "set_update_skew", "get_update_skew");
 }
 
 RemoteTransform2D::RemoteTransform2D() {

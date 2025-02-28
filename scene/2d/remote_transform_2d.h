@@ -43,6 +43,7 @@ class RemoteTransform2D : public Node2D {
 	bool update_remote_position = true;
 	bool update_remote_rotation = true;
 	bool update_remote_scale = true;
+	bool update_remote_skew = true;
 
 	void _update_remote();
 	void _update_cache();
@@ -66,6 +67,9 @@ public:
 
 	void set_update_scale(const bool p_update);
 	bool get_update_scale() const;
+
+	void set_update_skew(const bool p_update);
+	bool get_update_skew() const;
 
 	void force_update_cache();
 
