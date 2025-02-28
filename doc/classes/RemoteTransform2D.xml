@@ -30,6 +30,9 @@
 		<member name="update_scale" type="bool" setter="set_update_scale" getter="get_update_scale" default="true">
 			If [code]true[/code], the remote node's scale is updated.
 		</member>
+		<member name="update_skew" type="bool" setter="set_update_skew" getter="get_update_skew" default="true">
+			If [code]true[/code], the remote node's skew is updated.
+		</member>
 		<member name="use_global_coordinates" type="bool" setter="set_use_global_coordinates" getter="get_use_global_coordinates" default="true">
 			If [code]true[/code], global coordinates are used. If [code]false[/code], local coordinates are used.
 		</member>
