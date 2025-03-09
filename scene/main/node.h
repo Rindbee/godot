@@ -98,8 +98,9 @@ public:
 		DUPLICATE_GROUPS = 2,
 		DUPLICATE_SCRIPTS = 4,
 		DUPLICATE_USE_INSTANTIATION = 8,
+		DUPLICATE_OWNERLESS = 16,
 #ifdef TOOLS_ENABLED
-		DUPLICATE_FROM_EDITOR = 16,
+		DUPLICATE_FROM_EDITOR = 512,
 #endif
 	};
 
@@ -282,6 +283,11 @@ private:
 	void _propagate_groups_dirty();
 	void _propagate_translation_domain_dirty();
 	Array _get_node_and_resource(const NodePath &p_path);
+
+#ifdef TOOLS_ENABLED
+	void _remap_node_resources(Node *p_node, const HashMap<Ref<Resource>, Ref<Resource>> &p_resource_remap) const;
+	void _remap_nested_resources(Ref<Resource> p_resource, const HashMap<Ref<Resource>, Ref<Resource>> &p_resource_remap) const;
+#endif
 
 	void _duplicate_properties(const Node *p_root, const Node *p_original, Node *p_copy, int p_flags) const;
 	void _duplicate_signals(const Node *p_original, Node *p_copy) const;
@@ -645,12 +651,10 @@ public:
 	void set_process_thread_messages(BitField<ProcessThreadMessages> p_flags);
 	BitField<ProcessThreadMessages> get_process_thread_messages() const;
 
-	Node *duplicate(int p_flags = DUPLICATE_GROUPS | DUPLICATE_SIGNALS | DUPLICATE_SCRIPTS) const;
+	Node *duplicate(int p_flags = DUPLICATE_GROUPS | DUPLICATE_SIGNALS | DUPLICATE_SCRIPTS | DUPLICATE_OWNERLESS) const;
 #ifdef TOOLS_ENABLED
 	Node *duplicate_from_editor(HashMap<const Node *, Node *> &r_duplimap) const;
 	Node *duplicate_from_editor(HashMap<const Node *, Node *> &r_duplimap, const HashMap<Ref<Resource>, Ref<Resource>> &p_resource_remap) const;
-	void remap_node_resources(Node *p_node, const HashMap<Ref<Resource>, Ref<Resource>> &p_resource_remap) const;
-	void remap_nested_resources(Ref<Resource> p_resource, const HashMap<Ref<Resource>, Ref<Resource>> &p_resource_remap) const;
 #endif
 
 	// used by editors, to save what has changed only

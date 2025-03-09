@@ -624,7 +624,7 @@ void TileMap::fix_invalid_tiles() {
 #ifdef TOOLS_ENABLED
 TileMapLayer *TileMap::duplicate_layer_from_internal(int p_layer) {
 	ERR_FAIL_INDEX_V(p_layer, (int)layers.size(), nullptr);
-	return Object::cast_to<TileMapLayer>(layers[p_layer]->duplicate(DUPLICATE_USE_INSTANTIATION | DUPLICATE_FROM_EDITOR));
+	return Object::cast_to<TileMapLayer>(layers[p_layer]->duplicate(DUPLICATE_USE_INSTANTIATION | DUPLICATE_OWNERLESS | DUPLICATE_FROM_EDITOR));
 }
 #endif // TOOLS_ENABLED
 

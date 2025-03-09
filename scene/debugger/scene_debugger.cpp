@@ -1154,7 +1154,7 @@ void LiveEditor::_duplicate_node_func(const NodePath &p_at, const String &p_new_
 		}
 		Node *n2 = n->get_node(p_at);
 
-		Node *dup = n2->duplicate(Node::DUPLICATE_SIGNALS | Node::DUPLICATE_GROUPS | Node::DUPLICATE_SCRIPTS);
+		Node *dup = n2->duplicate(Node::DUPLICATE_SIGNALS | Node::DUPLICATE_GROUPS | Node::DUPLICATE_SCRIPTS | Node::DUPLICATE_OWNERLESS);
 
 		if (!dup) {
 			continue;

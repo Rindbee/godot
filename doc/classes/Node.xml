@@ -257,10 +257,12 @@
 		</method>
 		<method name="duplicate" qualifiers="const">
 			<return type="Node" />
-			<param index="0" name="flags" type="int" default="15" />
+			<param index="0" name="flags" type="int" default="31" />
 			<description>
 				Duplicates the node, returning a new node with all of its properties, signals, groups, and children copied from the original. The behavior can be tweaked through the [param flags] (see [enum DuplicateFlags]). Internal nodes are not duplicated.
+				If [constant DUPLICATE_OWNERLESS] is disabled, the node will always be duplicated, its descendants without a valid [member owner] node (and their descendants) are skipped.
 				[b]Note:[/b] For nodes with a [Script] attached, if [method Object._init] has been defined with required parameters, the duplicated node will not have a [Script].
+				[b]Note:[/b] When [constant DUPLICATE_USE_INSTANTIATION] is enabled and [constant DUPLICATE_OWNERLESS] is disabled, set the dynamically added nodes' [member owner] to the root node ([code]get_tree().get_root()[/code]) to include them.
 			</description>
 		</method>
 		<method name="find_child" qualifiers="const">
@@ -1011,6 +1013,7 @@
 		</member>
 		<member name="owner" type="Node" setter="set_owner" getter="get_owner">
 			The owner of this node. The owner must be an ancestor of this node. When packing the owner node in a [PackedScene], all the nodes it owns are also saved with it. See also [member unique_name_in_owner].
+
 			[b]Note:[/b] In the editor, nodes not owned by the scene root are usually not displayed in the Scene dock, and will [b]not[/b] be saved. To prevent this, remember to set the owner after calling [method add_child].
 		</member>
 		<member name="physics_interpolation_mode" type="int" setter="set_physics_interpolation_mode" getter="get_physics_interpolation_mode" enum="Node.PhysicsInterpolationMode" default="0">
@@ -1326,6 +1329,9 @@
 		</constant>
 		<constant name="DUPLICATE_USE_INSTANTIATION" value="8" enum="DuplicateFlags">
 			Duplicate using [method PackedScene.instantiate]. If the node comes from a scene saved on disk, reuses [method PackedScene.instantiate] as the base for the duplicated node and its children.
+		</constant>
+		<constant name="DUPLICATE_OWNERLESS" value="16" enum="DuplicateFlags">
+			Duplicate the node's ownerless descendants, but still do not duplicate the internal descendants. When this flag is disabled, ownerless descendants (and their descendants, even for those with [member owner]) are skipped.
 		</constant>
 		<constant name="INTERNAL_MODE_DISABLED" value="0" enum="InternalMode">
 			The node will not be internal.

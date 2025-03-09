@@ -2176,25 +2176,11 @@ void Node::set_owner(Node *p_owner) {
 		_clean_up_owner();
 	}
 
-	ERR_FAIL_COND(p_owner == this);
-
 	if (!p_owner) {
 		return;
 	}
 
-	Node *check = get_parent();
-	bool owner_valid = false;
-
-	while (check) {
-		if (check == p_owner) {
-			owner_valid = true;
-			break;
-		}
-
-		check = check->data.parent;
-	}
-
-	ERR_FAIL_COND_MSG(!owner_valid, "Invalid owner. Owner must be an ancestor in the tree.");
+	ERR_FAIL_COND_MSG(!p_owner->is_ancestor_of(this), "Invalid owner. Owner must be an ancestor in the tree.");
 
 	_set_owner_nocheck(p_owner);
 
@@ -2778,6 +2764,10 @@ Node *Node::_duplicate(int p_flags, HashMap<const Node *, Node *> *r_duplimap) c
 		node->data.editable_instance = data.editable_instance;
 	}
 
+	if (r_duplimap) {
+		r_duplimap->insert(this, node);
+	}
+
 	List<const Node *> hidden_roots;
 	List<const Node *> node_tree;
 	node_tree.push_front(this);
@@ -2793,6 +2783,10 @@ Node *Node::_duplicate(int p_flags, HashMap<const Node *, Node *> *r_duplimap) c
 			for (int i = 0; i < N->get()->get_child_count(false); ++i) {
 				Node *descendant = N->get()->get_child(i, false);
 
+				if (!(p_flags & DUPLICATE_OWNERLESS) && !descendant->data.owner) {
+					continue;
+				}
+
 				// Skip nodes not really belonging to the instantiated hierarchy; they'll be processed normally later
 				// but remember non-instantiated nodes that are hidden below instantiated ones
 				if (!instance_roots.has(descendant->get_owner())) {
@@ -2804,6 +2798,10 @@ Node *Node::_duplicate(int p_flags, HashMap<const Node *, Node *> *r_duplimap) c
 
 				node_tree.push_back(descendant);
 
+				if (r_duplimap) {
+					r_duplimap->insert(descendant, node->get_node_or_null(get_path_to(descendant)));
+				}
+
 				if (!descendant->get_scene_file_path().is_empty() && instance_roots.has(descendant->get_owner())) {
 					instance_roots.push_back(descendant);
 				}
@@ -2814,12 +2812,6 @@ Node *Node::_duplicate(int p_flags, HashMap<const Node *, Node *> *r_duplimap) c
 	if (get_name() != String()) {
 		node->set_name(get_name());
 	}
-
-#ifdef TOOLS_ENABLED
-	if ((p_flags & DUPLICATE_FROM_EDITOR) && r_duplimap) {
-		r_duplimap->insert(this, node);
-	}
-#endif
 
 	if (p_flags & DUPLICATE_GROUPS) {
 		List<GroupInfo> gi;
@@ -2836,11 +2828,17 @@ Node *Node::_duplicate(int p_flags, HashMap<const Node *, Node *> *r_duplimap) c
 	}
 
 	for (int i = 0; i < get_child_count(false); i++) {
-		if (instantiated && get_child(i)->data.owner == this) {
-			continue; //part of instance
+		Node *child = get_child(i, false);
+
+		if (!(p_flags & DUPLICATE_OWNERLESS) && !child->data.owner) {
+			continue;
 		}
 
-		Node *dup = get_child(i)->_duplicate(p_flags, r_duplimap);
+		if (instantiated && child->data.owner == this) {
+			continue; // Part of instance.
+		}
+
+		Node *dup = child->_duplicate(p_flags, r_duplimap);
 		if (!dup) {
 			memdelete(node);
 			return nullptr;
@@ -2877,14 +2875,18 @@ Node *Node::_duplicate(int p_flags, HashMap<const Node *, Node *> *r_duplimap) c
 
 Node *Node::duplicate(int p_flags) const {
 	ERR_THREAD_GUARD_V(nullptr);
-	Node *dupe = _duplicate(p_flags);
+	HashMap<const Node *, Node *> duplimap;
+	Node *dupe = _duplicate(p_flags, &duplimap);
 
 	ERR_FAIL_NULL_V_MSG(dupe, nullptr, "Failed to duplicate node.");
 
-	_duplicate_properties(this, this, dupe, p_flags);
+	bool duplicate_signales = (p_flags & DUPLICATE_SIGNALS) != 0;
 
-	if (p_flags & DUPLICATE_SIGNALS) {
-		_duplicate_signals(this, dupe);
+	for (KeyValue<const Node *, Node *> E : duplimap) {
+		_duplicate_properties(this, E.key, E.value, p_flags);
+		if (duplicate_signales) {
+			_duplicate_signals(E.key, E.value);
+		}
 	}
 
 	return dupe;
@@ -2896,27 +2898,38 @@ Node *Node::duplicate_from_editor(HashMap<const Node *, Node *> &r_duplimap) con
 }
 
 Node *Node::duplicate_from_editor(HashMap<const Node *, Node *> &r_duplimap, const HashMap<Ref<Resource>, Ref<Resource>> &p_resource_remap) const {
-	int flags = DUPLICATE_SIGNALS | DUPLICATE_GROUPS | DUPLICATE_SCRIPTS | DUPLICATE_USE_INSTANTIATION | DUPLICATE_FROM_EDITOR;
+	int flags = DUPLICATE_SIGNALS | DUPLICATE_GROUPS | DUPLICATE_SCRIPTS | DUPLICATE_USE_INSTANTIATION | DUPLICATE_OWNERLESS | DUPLICATE_FROM_EDITOR;
 	Node *dupe = _duplicate(flags, &r_duplimap);
 
 	ERR_FAIL_NULL_V_MSG(dupe, nullptr, "Failed to duplicate node.");
 
-	_duplicate_properties(this, this, dupe, flags);
+	Vector<const Node *> instance_roots;
 
-	// This is used by SceneTreeDock's paste functionality. When pasting to foreign scene, resources are duplicated.
-	if (!p_resource_remap.is_empty()) {
-		remap_node_resources(dupe, p_resource_remap);
+	for (KeyValue<const Node *, Node *> E : r_duplimap) {
+		_duplicate_properties(this, E.key, E.value, flags);
+
+		// This is used by SceneTreeDock's paste functionality. When pasting to foreign scene, resources are duplicated.
+		if (!p_resource_remap.is_empty()) {
+			_remap_node_resources(E.value, p_resource_remap);
+		}
+
+		// Duplication of signals must happen after all the node descendants have been copied,
+		// because re-targeting of connections from some descendant to another is not possible
+		// if the emitter node comes later in tree order than the receiver
+		_duplicate_signals(E.key, E.value);
+
+		if (E.key->data.owner && instance_roots.has(E.key->data.owner)) {
+			r_duplimap.erase(E.key);
+		}
+		if (!E.key->get_scene_file_path().is_empty()) {
+			instance_roots.push_back(E.key);
+		}
 	}
-
-	// Duplication of signals must happen after all the node descendants have been copied,
-	// because re-targeting of connections from some descendant to another is not possible
-	// if the emitter node comes later in tree order than the receiver
-	_duplicate_signals(this, dupe);
 
 	return dupe;
 }
 
-void Node::remap_node_resources(Node *p_node, const HashMap<Ref<Resource>, Ref<Resource>> &p_resource_remap) const {
+void Node::_remap_node_resources(Node *p_node, const HashMap<Ref<Resource>, Ref<Resource>> &p_resource_remap) const {
 	List<PropertyInfo> props;
 	p_node->get_property_list(&props);
 
@@ -2931,18 +2944,14 @@ void Node::remap_node_resources(Node *p_node, const HashMap<Ref<Resource>, Ref<R
 			if (res.is_valid()) {
 				if (p_resource_remap.has(res)) {
 					p_node->set(E.name, p_resource_remap[res]);
-					remap_nested_resources(res, p_resource_remap);
+					_remap_nested_resources(res, p_resource_remap);
 				}
 			}
 		}
 	}
-
-	for (int i = 0; i < p_node->get_child_count(); i++) {
-		remap_node_resources(p_node->get_child(i), p_resource_remap);
-	}
 }
 
-void Node::remap_nested_resources(Ref<Resource> p_resource, const HashMap<Ref<Resource>, Ref<Resource>> &p_resource_remap) const {
+void Node::_remap_nested_resources(Ref<Resource> p_resource, const HashMap<Ref<Resource>, Ref<Resource>> &p_resource_remap) const {
 	List<PropertyInfo> props;
 	p_resource->get_property_list(&props);
 
@@ -2957,7 +2966,7 @@ void Node::remap_nested_resources(Ref<Resource> p_resource, const HashMap<Ref<Re
 			if (res.is_valid()) {
 				if (p_resource_remap.has(res)) {
 					p_resource->set(E.name, p_resource_remap[res]);
-					remap_nested_resources(res, p_resource_remap);
+					_remap_nested_resources(res, p_resource_remap);
 				}
 			}
 		}
@@ -3028,71 +3037,43 @@ void Node::_duplicate_properties(const Node *p_root, const Node *p_original, Nod
 			}
 		}
 	}
-
-	for (int i = 0; i < p_original->get_child_count(false); i++) {
-		Node *copy_child = p_copy->get_child(i, false);
-		ERR_FAIL_NULL_MSG(copy_child, "Child node disappeared while duplicating.");
-		_duplicate_properties(p_root, p_original->get_child(i, false), copy_child, p_flags);
-	}
 }
 
 // Duplication of signals must happen after all the node descendants have been copied,
 // because re-targeting of connections from some descendant to another is not possible
 // if the emitter node comes later in tree order than the receiver
 void Node::_duplicate_signals(const Node *p_original, Node *p_copy) const {
-	if ((this != p_original) && !(p_original->is_ancestor_of(this))) {
-		return;
-	}
+	List<Connection> conns;
+	p_original->get_all_signal_connections(&conns);
 
-	List<const Node *> process_list;
-	process_list.push_back(this);
-	while (!process_list.is_empty()) {
-		const Node *n = process_list.front()->get();
-		process_list.pop_front();
+	for (const Connection &E : conns) {
+		if (E.flags & CONNECT_PERSIST) {
+			Node *target = Object::cast_to<Node>(E.callable.get_object());
+			if (!target) {
+				continue;
+			}
 
-		List<Connection> conns;
-		n->get_all_signal_connections(&conns);
+			// Attempt to find a path to the duplicate target, if it seems it's not part
+			// of the duplicated and not yet parented hierarchy then at least try to connect
+			// to the same target as the original.
+			Node *copytarget = p_copy->get_node_or_null(p_original->get_path_to(target));
+			if (!copytarget) {
+				copytarget = target;
+			}
 
-		for (const Connection &E : conns) {
-			if (E.flags & CONNECT_PERSIST) {
-				//user connected
-				NodePath p = p_original->get_path_to(n);
-				Node *copy = p_copy->get_node(p);
-
-				Node *target = Object::cast_to<Node>(E.callable.get_object());
-				if (!target) {
-					continue;
-				}
-				NodePath ptarget = p_original->get_path_to(target);
-
-				Node *copytarget = target;
-
-				// Attempt to find a path to the duplicate target, if it seems it's not part
-				// of the duplicated and not yet parented hierarchy then at least try to connect
-				// to the same target as the original
-
-				if (p_copy->has_node(ptarget)) {
-					copytarget = p_copy->get_node(ptarget);
-				}
-
-				if (copy && copytarget && E.callable.get_method() != StringName()) {
-					Callable copy_callable = Callable(copytarget, E.callable.get_method());
-					if (!copy->is_connected(E.signal.get_name(), copy_callable)) {
-						int unbound_arg_count = E.callable.get_unbound_arguments_count();
-						if (unbound_arg_count > 0) {
-							copy_callable = copy_callable.unbind(unbound_arg_count);
-						}
-						if (E.callable.get_bound_arguments_count() > 0) {
-							copy_callable = copy_callable.bindv(E.callable.get_bound_arguments());
-						}
-						copy->connect(E.signal.get_name(), copy_callable, E.flags);
+			if (!E.callable.get_method().is_empty()) {
+				Callable copy_callable = Callable(copytarget, E.callable.get_method());
+				if (!p_copy->is_connected(E.signal.get_name(), copy_callable)) {
+					int unbound_arg_count = E.callable.get_unbound_arguments_count();
+					if (unbound_arg_count > 0) {
+						copy_callable = copy_callable.unbind(unbound_arg_count);
 					}
+					if (E.callable.get_bound_arguments_count() > 0) {
+						copy_callable = copy_callable.bindv(E.callable.get_bound_arguments());
+					}
+					p_copy->connect(E.signal.get_name(), copy_callable, E.flags);
 				}
 			}
-		}
-
-		for (int i = 0; i < n->get_child_count(); i++) {
-			process_list.push_back(n->get_child(i));
 		}
 	}
 }
@@ -3694,7 +3675,7 @@ void Node::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_tree"), &Node::get_tree);
 	ClassDB::bind_method(D_METHOD("create_tween"), &Node::create_tween);
 
-	ClassDB::bind_method(D_METHOD("duplicate", "flags"), &Node::duplicate, DEFVAL(DUPLICATE_USE_INSTANTIATION | DUPLICATE_SIGNALS | DUPLICATE_GROUPS | DUPLICATE_SCRIPTS));
+	ClassDB::bind_method(D_METHOD("duplicate", "flags"), &Node::duplicate, DEFVAL(DUPLICATE_USE_INSTANTIATION | DUPLICATE_SIGNALS | DUPLICATE_GROUPS | DUPLICATE_SCRIPTS | DUPLICATE_OWNERLESS));
 	ClassDB::bind_method(D_METHOD("replace_by", "node", "keep_groups"), &Node::replace_by, DEFVAL(false));
 
 	ClassDB::bind_method(D_METHOD("set_scene_instance_load_placeholder", "load_placeholder"), &Node::set_scene_instance_load_placeholder);
@@ -3840,6 +3821,7 @@ void Node::_bind_methods() {
 	BIND_ENUM_CONSTANT(DUPLICATE_GROUPS);
 	BIND_ENUM_CONSTANT(DUPLICATE_SCRIPTS);
 	BIND_ENUM_CONSTANT(DUPLICATE_USE_INSTANTIATION);
+	BIND_ENUM_CONSTANT(DUPLICATE_OWNERLESS);
 
 	BIND_ENUM_CONSTANT(INTERNAL_MODE_DISABLED);
 	BIND_ENUM_CONSTANT(INTERNAL_MODE_FRONT);
