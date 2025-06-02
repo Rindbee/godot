@@ -1267,6 +1267,11 @@ bool Expression::_execute(const Array &p_inputs, Object *p_instance, Expression:
 				return true;
 			}
 
+			if ((op->op == Variant::OP_OR && a) || (op->op == Variant::OP_AND && !a)) {
+				r_ret = a;
+				break; // Short-circuit evaluation.
+			}
+
 			Variant b;
 
 			if (op->nodes[1]) {

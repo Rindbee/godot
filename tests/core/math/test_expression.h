@@ -318,6 +318,42 @@ TEST_CASE("[Expression] Boolean expressions") {
 			"The boolean expression should evaluate to `false`.");
 }
 
+TEST_CASE("[Expression] Short-circuit evaluation") {
+	Expression expression;
+	SUBCASE("Logical AND") {
+		SUBCASE("&& operator") {
+			Math::seed(0); // 881477183, 1327520283, 692503688, 2153658078, 2046399657
+			REQUIRE_EQ(expression.parse("(randi() > 0) && (randi() > 0) && (randi() < 0) && (randi() < 0) "), OK);
+
+			CHECK_UNARY_FALSE(bool(expression.execute()));
+			CHECK_EQ(Math::rand(), 2153658078);
+		}
+		SUBCASE("and operator") {
+			Math::seed(0);
+			REQUIRE_EQ(expression.parse("(randi() > 0) and (randi() > 0) and (randi() < 0) and (randi() < 0) "), OK);
+
+			CHECK_UNARY_FALSE(bool(expression.execute()));
+			CHECK_EQ(Math::rand(), 2153658078);
+		}
+	}
+	SUBCASE("Logical OR") {
+		SUBCASE("|| operator") {
+			Math::seed(0);
+			REQUIRE_EQ(expression.parse("(randi() < 0) || (randi() < 0) || (randi() > 0) || (randi() > 0)"), OK);
+
+			CHECK_UNARY(bool(expression.execute()));
+			CHECK_EQ(Math::rand(), 2153658078);
+		}
+		SUBCASE("or operator") {
+			Math::seed(0);
+			REQUIRE_EQ(expression.parse("(randi() < 0) or (randi() < 0) or (randi() > 0) or (randi() > 0)"), OK);
+
+			CHECK_UNARY(bool(expression.execute()));
+			CHECK_EQ(Math::rand(), 2153658078);
+		}
+	}
+}
+
 TEST_CASE("[Expression] Expressions with variables") {
 	Expression expression;
 
