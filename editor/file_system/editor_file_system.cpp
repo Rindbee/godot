@@ -393,26 +393,26 @@ void EditorFileSystem::_scan_filesystem() {
 	// On the first scan, the first_scan_root_dir is created in _first_scan_filesystem.
 	ERR_FAIL_COND(!scanning || new_filesystem || (first_scan && !first_scan_root_dir));
 
-	//read .fscache
-	String cpath;
+	new_filesystem = memnew(EditorFileSystemDirectory);
+	new_filesystem->parent = nullptr;
 
 	sources_changed.clear();
 	file_cache.clear();
 
-	String project = ProjectSettings::get_singleton()->get_resource_path();
-
-	String fscache = EditorPaths::get_singleton()->get_project_settings_dir().path_join(CACHE_FILE_NAME);
+	// Read .fscache.
 	{
+		const String fscache = EditorPaths::get_singleton()->get_project_settings_dir().path_join(CACHE_FILE_NAME);
 		Ref<FileAccess> f = FileAccess::open(fscache, FileAccess::READ);
 
-		bool first = true;
 		if (f.is_valid()) {
-			//read the disk cache
+			// Read the disk cache.
+			String cpath;
+			bool is_first_line = true;
 			while (!f->eof_reached()) {
 				String l = f->get_line().strip_edges();
-				if (first) {
+				if (is_first_line) {
 					if (first_scan) {
-						// only use this on first scan, afterwards it gets ignored
+						// Only use this on first scan, afterwards it gets ignored
 						// this is so on first reimport we synchronize versions, then
 						// we don't care until editor restart. This is for usability mainly so
 						// your workflow is not killed after changing a setting by forceful reimporting
@@ -422,7 +422,7 @@ void EditorFileSystem::_scan_filesystem() {
 							revalidate_import_files = true;
 						}
 					}
-					first = false;
+					is_first_line = false;
 					continue;
 				}
 				if (l.is_empty()) {
@@ -440,11 +440,7 @@ void EditorFileSystem::_scan_filesystem() {
 					// The last section (deps) may contain the same splitter, so limit the maxsplit to 8 to get the complete deps.
 					Vector<String> split = l.split("::", true, 8);
 					ERR_CONTINUE(split.size() < 9);
-					String name = split[0];
-					String file;
-
-					file = name;
-					name = cpath.path_join(name);
+					String file = cpath.path_join(split[0]);
 
 					FileCache fc;
 					fc.type = split[1].get_slicec('/', 0);
@@ -467,7 +463,7 @@ void EditorFileSystem::_scan_filesystem() {
 					}
 					fc.deps = split[8].strip_edges().split("<>", false);
 
-					file_cache[name] = fc;
+					file_cache[file] = fc;
 				}
 			}
 		}
@@ -493,9 +489,6 @@ void EditorFileSystem::_scan_filesystem() {
 	ScanProgress sp;
 	sp.hi = nb_files_total;
 	sp.progress = &scan_progress;
-
-	new_filesystem = memnew(EditorFileSystemDirectory);
-	new_filesystem->parent = nullptr;
 
 	ScannedDirectory *sd;
 	HashSet<String> *processed_files = nullptr;
@@ -527,8 +520,6 @@ void EditorFileSystem::_scan_filesystem() {
 		//on the first scan this is done from the main thread after re-importing
 		_save_filesystem_cache();
 	}
-
-	scanning = false;
 }
 
 void EditorFileSystem::_save_filesystem_cache() {
@@ -546,6 +537,7 @@ void EditorFileSystem::_save_filesystem_cache() {
 void EditorFileSystem::_thread_func(void *_userdata) {
 	EditorFileSystem *sd = (EditorFileSystem *)_userdata;
 	sd->_scan_filesystem();
+	sd->scanning_done.set();
 }
 
 bool EditorFileSystem::_is_test_for_reimport_needed(const String &p_path, uint64_t p_last_modification_time, uint64_t p_modification_time, uint64_t p_last_import_modification_time, uint64_t p_import_modification_time, const Vector<String> &p_import_dest_paths) {
@@ -1089,11 +1081,13 @@ void EditorFileSystem::scan() {
 	}
 
 	_update_extensions();
+	scanning_done.clear();
+	scanning = true;
+	scan_total = 0;
 
 	if (!use_threads) {
-		scanning = true;
-		scan_total = 0;
 		_scan_filesystem();
+		scanning_done.set();
 		if (filesystem) {
 			memdelete(filesystem);
 		}
@@ -1114,8 +1108,6 @@ void EditorFileSystem::scan() {
 		ERR_FAIL_COND(thread.is_started());
 		set_process(true);
 		Thread::Settings s;
-		scanning = true;
-		scan_total = 0;
 		s.priority = Thread::PRIORITY_LOW;
 		thread.start(_thread_func, this, s);
 	}
@@ -1724,7 +1716,7 @@ void EditorFileSystem::_notification(int p_what) {
 		case NOTIFICATION_EXIT_TREE: {
 			Thread &active_thread = thread.is_started() ? thread : thread_sources;
 			if (use_threads && active_thread.is_started()) {
-				while (scanning) {
+				while (!scanning_done.is_set()) {
 					OS::get_singleton()->delay_usec(1000);
 				}
 				active_thread.wait_to_finish();
@@ -1778,7 +1770,7 @@ void EditorFileSystem::_notification(int p_what) {
 						}
 						emit_signal(SNAME("sources_changed"), sources_changed.size() > 0);
 					}
-				} else if (!scanning && thread.is_started()) {
+				} else if (scanning && scanning_done.is_set()) {
 					set_process(false);
 
 					if (filesystem) {
@@ -1790,6 +1782,7 @@ void EditorFileSystem::_notification(int p_what) {
 					_update_scan_actions();
 					// Update all icons so they are loaded for the FileSystemDock.
 					_update_files_icon_path();
+					scanning = false;
 					// Set first_scan to false before the signals so the function doing_first_scan can return false
 					// in editor_node to start the export if needed.
 					first_scan = false;
@@ -1860,7 +1853,7 @@ void EditorFileSystem::_save_filesystem_cache(EditorFileSystemDirectory *p_dir, 
 bool EditorFileSystem::_find_file(const String &p_file, EditorFileSystemDirectory **r_d, int &r_file_pos) const {
 	//todo make faster
 
-	if (!filesystem || scanning) {
+	if (!filesystem || !scanning_done.is_set()) {
 		return false;
 	}
 
@@ -1968,7 +1961,7 @@ String EditorFileSystem::get_file_type(const String &p_file) const {
 }
 
 EditorFileSystemDirectory *EditorFileSystem::find_file(const String &p_file, int *r_index) const {
-	if (!filesystem || scanning) {
+	if (!filesystem || !scanning_done.is_set()) {
 		return nullptr;
 	}
 
@@ -1996,7 +1989,7 @@ ResourceUID::ID EditorFileSystem::get_file_uid(const String &p_path) const {
 }
 
 EditorFileSystemDirectory *EditorFileSystem::get_filesystem_path(const String &p_path) {
-	if (!filesystem || scanning) {
+	if (!filesystem || !scanning_done.is_set()) {
 		return nullptr;
 	}
 
@@ -2559,10 +2552,9 @@ void EditorFileSystem::_register_global_class_script(const String &p_search_path
 			break;
 		}
 	}
-	if (lang.is_empty()) {
-		return; // No lang found that can handle this global class
-	}
-	ResourceUID::ID uid = first_scan && !scanning ? ResourceLoader::get_resource_uid(p_target_path) : get_file_uid(p_target_path);
+	ERR_FAIL_COND(lang.is_empty()); // No lang found that can handle this global class.
+
+	ResourceUID::ID uid = first_scan && !scanning_done.is_set() ? ResourceLoader::get_resource_uid(p_target_path) : get_file_uid(p_target_path);
 	ScriptServer::add_global_class(p_script_update.name, p_script_update.extends, lang, p_target_path, p_script_update.is_abstract, p_script_update.is_tool, uid);
 	EditorNode::get_editor_data().script_class_set_icon_path(p_script_update.name, p_script_update.icon_path);
 	EditorNode::get_editor_data().script_class_set_name(p_target_path, p_script_update.name);
