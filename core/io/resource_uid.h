@@ -60,6 +60,36 @@ private:
 	uint32_t cache_entries = 0;
 	bool changed = false;
 
+#ifdef TOOLS_ENABLED
+	enum HistoryType {
+		NONE,
+		REMOVE,
+		ADD,
+		CREATE,
+		LOAD,
+	};
+
+	struct HistoryEntry {
+		uint64_t time = 0;
+		ID uid = INVALID_ID;
+		String path;
+		uint32_t type = NONE;
+	};
+
+	int last_history_idx = 0;
+	int history_idx = 0;
+	Vector<HistoryEntry> history;
+
+	struct ActionEntry {
+		HistoryEntry first;
+		HistoryEntry second;
+	};
+
+	int last_action_idx = 0;
+	int action_idx = 0;
+	Vector<ActionEntry> actions;
+#endif // TOOLS_ENABLED
+
 protected:
 	static void _bind_methods();
 
@@ -86,7 +116,10 @@ public:
 	Error update_cache();
 	static String get_path_from_cache(Ref<FileAccess> &p_cache_file, const String &p_uid_string);
 
-	void clear();
+#ifdef TOOLS_ENABLED
+	void parse_actions_from_history();
+	void print_recent_actions();
+#endif // TOOLS_ENABLED
 
 	static ResourceUID *get_singleton() { return singleton; }
 
