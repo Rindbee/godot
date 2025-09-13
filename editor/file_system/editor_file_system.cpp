@@ -872,6 +872,25 @@ bool EditorFileSystem::_action_file_remove(EditorFileSystemDirectory *p_dir, int
 	return true;
 }
 
+bool EditorFileSystem::_action_dir_remove(EditorFileSystemDirectory *p_dir, bool immediately) {
+	bool files_changed = p_dir->files.size() > 0;
+
+	for (int idx = 0; idx < p_dir->files.size(); idx++) {
+		_action_file_remove(p_dir, idx, false);
+	}
+
+	for (EditorFileSystemDirectory *sub_dir : p_dir->subdirs) {
+		files_changed |= _action_dir_remove(sub_dir, false);
+	}
+
+	if (immediately) {
+		p_dir->parent->subdirs.erase(p_dir);
+		memdelete(p_dir);
+	}
+
+	return files_changed;
+}
+
 bool EditorFileSystem::_update_scan_actions() {
 	sources_changed.clear();
 
@@ -912,8 +931,7 @@ bool EditorFileSystem::_update_scan_actions() {
 			} break;
 			case ItemAction::ACTION_DIR_REMOVE: {
 				ERR_CONTINUE(!ia.dir->parent);
-				ia.dir->parent->subdirs.erase(ia.dir);
-				memdelete(ia.dir);
+				_action_dir_remove(ia.dir);
 				fs_changed = true;
 			} break;
 			case ItemAction::ACTION_FILE_ADD: {
