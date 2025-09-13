@@ -258,6 +258,7 @@ class EditorFileSystem : public Node {
 	HashSet<String> valid_extensions;
 	HashSet<String> import_extensions;
 
+	static bool _validate_file_extension(const String &p_file, const HashSet<String> &p_extensions);
 	static int _scan_new_dir(ScannedDirectory *p_dir, Ref<DirAccess> &da);
 	void _process_file_system(const ScannedDirectory *p_scan_dir, EditorFileSystemDirectory *p_dir, ScanProgress &p_progress, HashSet<String> *p_processed_files);
 
@@ -282,7 +283,6 @@ class EditorFileSystem : public Node {
 
 	bool _test_for_reimport(const String &p_path, const String &p_expected_import_md5);
 	bool _is_test_for_reimport_needed(const String &p_path, uint64_t p_last_modification_time, uint64_t p_modification_time, uint64_t p_last_import_modification_time, uint64_t p_import_modification_time, const Vector<String> &p_import_dest_paths);
-	bool _can_import_file(const String &p_path);
 	Vector<String> _get_import_dest_paths(const String &p_path);
 
 	bool reimport_on_missing_imported_files;
