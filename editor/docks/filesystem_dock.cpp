@@ -1863,7 +1863,14 @@ void FileSystemDock::_rename_operation_confirm() {
 	}
 
 	print_verbose("FileSystem: calling rescan.");
-	_rescan();
+	if (tree->has_focus()) {
+		had_focus = tree;
+	} else if (files->has_focus()) {
+		had_focus = files;
+	}
+
+	_set_scanning_mode();
+	EditorFileSystem::get_singleton()->pending_scan_fs_changes(old_path.get_base_dir(), !to_rename.is_file);
 }
 
 void FileSystemDock::_duplicate_operation_confirm(const String &p_path) {
@@ -2003,6 +2010,7 @@ void FileSystemDock::_move_operation_confirm(const String &p_to_path, bool p_cop
 			if (to_move[i].path != new_paths[i]) {
 				_try_move_item(to_move[i], new_paths[i], file_renames, folder_renames);
 				is_moved = true;
+				EditorFileSystem::get_singleton()->pending_scan_fs_changes(to_move[i].path.get_base_dir(), !to_move[i].is_file);
 			}
 		}
 
@@ -2016,7 +2024,14 @@ void FileSystemDock::_move_operation_confirm(const String &p_to_path, bool p_cop
 			EditorSceneTabs::get_singleton()->set_current_tab(current_tab);
 
 			print_verbose("FileSystem: calling rescan.");
-			_rescan();
+			if (tree->has_focus()) {
+				had_focus = tree;
+			} else if (files->has_focus()) {
+				had_focus = files;
+			}
+
+			_set_scanning_mode();
+			EditorFileSystem::get_singleton()->pending_scan_fs_changes(p_to_path, true);
 
 			current_path = p_to_path;
 			current_path_line_edit->set_text(current_path);
@@ -2764,17 +2779,6 @@ bool FileSystemDock::_matches_all_search_tokens(const String &p_text) {
 		}
 	}
 	return true;
-}
-
-void FileSystemDock::_rescan() {
-	if (tree->has_focus()) {
-		had_focus = tree;
-	} else if (files->has_focus()) {
-		had_focus = files;
-	}
-
-	_set_scanning_mode();
-	EditorFileSystem::get_singleton()->scan();
 }
 
 void FileSystemDock::_change_bottom_dock_placement() {
