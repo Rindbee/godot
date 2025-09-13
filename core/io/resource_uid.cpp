@@ -37,6 +37,12 @@
 #include "core/io/resource_loader.h"
 #include "core/math/random_pcg.h"
 
+#ifdef TOOLS_ENABLED
+#define TOOLS_PRINT_VERBOSE(m_text) print_verbose(m_text)
+#else
+#define TOOLS_PRINT_VERBOSE(m_text)
+#endif
+
 // These constants are off by 1, causing the 'z' and '9' characters never to be used.
 // This cannot be fixed without breaking compatibility; see GH-83843.
 static constexpr uint32_t char_count = ('z' - 'a');
@@ -244,6 +250,8 @@ Error ResourceUID::save_to_cache() {
 
 	cache_entries = 0;
 
+	TOOLS_PRINT_VERBOSE("Saving uids to file...");
+
 	for (KeyValue<ID, Cache> &E : unique_ids) {
 		f->store_64(uint64_t(E.key));
 		uint32_t s = E.value.cs.length();
@@ -251,7 +259,10 @@ Error ResourceUID::save_to_cache() {
 		f->store_buffer((const uint8_t *)E.value.cs.ptr(), s);
 		E.value.saved_to_cache = true;
 		cache_entries++;
+		TOOLS_PRINT_VERBOSE(vformat("Saving uid:\"%s\" path:\"%s\".", id_to_text(E.key), String::utf8(E.value.cs.ptr())));
 	}
+
+	TOOLS_PRINT_VERBOSE("Saving uids done.");
 
 	changed = false;
 	return OK;
@@ -268,6 +279,8 @@ Error ResourceUID::load_from_cache(bool p_reset) {
 		unique_ids.clear();
 	}
 
+	TOOLS_PRINT_VERBOSE("Loading uids from cache...");
+
 	uint32_t entry_count = f->get_32();
 	for (uint32_t i = 0; i < entry_count; i++) {
 		int64_t id = f->get_64();
@@ -281,7 +294,11 @@ Error ResourceUID::load_from_cache(bool p_reset) {
 
 		c.saved_to_cache = true;
 		unique_ids[id] = c;
+
+		TOOLS_PRINT_VERBOSE(vformat("Loading uid:\"%s\" path:\"%s\".", id_to_text(id), String::utf8(c.cs.ptr())));
 	}
+
+	TOOLS_PRINT_VERBOSE("Loading uids done.");
 
 	cache_entries = entry_count;
 	changed = false;
@@ -300,7 +317,7 @@ Error ResourceUID::update_cache() {
 		return save_to_cache();
 	}
 	MutexLock l(mutex);
-
+	TOOLS_PRINT_VERBOSE("Appending uids to file...");
 	Ref<FileAccess> f;
 	for (KeyValue<ID, Cache> &E : unique_ids) {
 		if (!E.value.saved_to_cache) {
@@ -317,9 +334,10 @@ Error ResourceUID::update_cache() {
 			f->store_buffer((const uint8_t *)E.value.cs.ptr(), s);
 			E.value.saved_to_cache = true;
 			cache_entries++;
+			TOOLS_PRINT_VERBOSE(vformat("Appending uid:\"%s\" path:\"%s\".", id_to_text(E.key), String::utf8(E.value.cs.ptr())));
 		}
 	}
-
+	TOOLS_PRINT_VERBOSE("Appending uids done.");
 	if (f.is_valid()) {
 		f->seek(0);
 		f->store_32(cache_entries); //update amount of entries
