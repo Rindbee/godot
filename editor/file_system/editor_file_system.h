@@ -47,7 +47,7 @@ class EditorFileSystemDirectory : public Object {
 
 	String name;
 	uint64_t modified_time;
-	bool verified = false; //used for checking changes
+	bool verified = false; // Used for checking changes.
 
 	EditorFileSystemDirectory *parent = nullptr;
 	Vector<EditorFileSystemDirectory *> subdirs;
@@ -61,14 +61,15 @@ class EditorFileSystemDirectory : public Object {
 		uint64_t import_modified_time = 0;
 		String import_md5;
 		Vector<String> import_dest_paths;
-		bool import_valid = false;
+		bool import_valid = true;
 		String import_group_file;
 		Vector<String> deps;
-		bool verified = false; //used for checking changes
+		bool verified = false; // Used for checking changes.
 		// This is for script resources only.
 		struct ScriptClassInfo {
 			String name;
 			String extends;
+			String lang;
 			String icon_path;
 			bool is_abstract = false;
 			bool is_tool = false;
@@ -310,6 +311,7 @@ class EditorFileSystem : public Node {
 			update.type = p_fi->type;
 			update.name = p_fi->class_info.name;
 			update.extends = p_fi->class_info.extends;
+			update.lang = p_fi->class_info.lang;
 			update.icon_path = p_fi->class_info.icon_path;
 			update.is_abstract = p_fi->class_info.is_abstract;
 			update.is_tool = p_fi->class_info.is_tool;
