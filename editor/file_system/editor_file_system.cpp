@@ -366,7 +366,7 @@ void EditorFileSystem::_first_scan_process_scripts(const ScannedDirectory *p_sca
 			const String path = p_scan_dir->full_path.path_join(scan_file);
 			const String type = ResourceLoader::get_resource_type(path);
 
-			if (ClassDB::is_parent_class(type, SNAME("Script"))) {
+			if (ClassDB::is_parent_class(type, Script::get_class_static())) {
 				const ScriptClassInfo &info = _get_global_script_class(type, path);
 				ScriptClassInfoUpdate update(info);
 				update.type = type;
@@ -382,7 +382,7 @@ void EditorFileSystem::_first_scan_process_scripts(const ScannedDirectory *p_sca
 		if (p_gdextension_extensions.find(ext)) {
 			const String path = p_scan_dir->full_path.path_join(scan_file);
 			const String type = ResourceLoader::get_resource_type(path);
-			if (type == SNAME("GDExtension")) {
+			if (type == GDExtension::get_class_static()) {
 				p_extensions.insert(path);
 			}
 		}
@@ -974,10 +974,9 @@ bool EditorFileSystem::_update_scan_actions() {
 					}
 				}
 
-				if (ClassDB::is_parent_class(ia.new_file->type, SNAME("Script"))) {
+				if (ClassDB::is_parent_class(ia.new_file->type, Script::get_class_static())) {
 					_queue_update_script_class(new_file_path, ScriptClassInfoUpdate::from_file_info(ia.new_file));
-				}
-				if (ia.new_file->type == SNAME("PackedScene")) {
+				} else if (ia.new_file->type == PackedScene::get_class_static()) {
 					_queue_update_scene_groups(new_file_path);
 				}
 
@@ -1341,7 +1340,7 @@ void EditorFileSystem::_process_file_system(const ScannedDirectory *p_scan_dir, 
 				fi->import_valid = true;
 				fi->class_info = fc->class_info;
 
-				if (first_scan && ClassDB::is_parent_class(fi->type, SNAME("Script"))) {
+				if (first_scan && ClassDB::is_parent_class(fi->type, Script::get_class_static())) {
 					bool update_script = false;
 					String old_class_name = fi->class_info.name;
 					fi->class_info = _get_global_script_class(fi->type, path);
@@ -1377,10 +1376,9 @@ void EditorFileSystem::_process_file_system(const ScannedDirectory *p_scan_dir, 
 
 				// Files in dep_update_list are forced for rescan to update dependencies. They don't need other updates.
 				if (!dep_update_list.has(path)) {
-					if (ClassDB::is_parent_class(fi->type, SNAME("Script"))) {
+					if (ClassDB::is_parent_class(fi->type, Script::get_class_static())) {
 						_queue_update_script_class(path, ScriptClassInfoUpdate::from_file_info(fi));
-					}
-					if (fi->type == SNAME("PackedScene")) {
+					} else if (fi->type == PackedScene::get_class_static()) {
 						_queue_update_scene_groups(path);
 					}
 				}
@@ -1442,7 +1440,7 @@ void EditorFileSystem::_process_file_system(const ScannedDirectory *p_scan_dir, 
 void EditorFileSystem::_process_removed_files(const HashSet<String> &p_processed_files) {
 	for (const KeyValue<String, EditorFileSystem::FileCache> &kv : file_cache) {
 		if (!p_processed_files.has(kv.key)) {
-			if (ClassDB::is_parent_class(kv.value.type, SNAME("Script")) || ClassDB::is_parent_class(kv.value.type, SNAME("PackedScene"))) {
+			if (ClassDB::is_parent_class(kv.value.type, Script::get_class_static()) || ClassDB::is_parent_class(kv.value.type, PackedScene::get_class_static())) {
 				// A script has been removed from disk since the last startup. The documentation needs to be updated.
 				// There's no need to add the path in update_script_paths since that is exclusively for updating global class names,
 				// which is handled in _first_scan_filesystem before the full scan to ensure plugins and autoloads can be created.
@@ -2153,7 +2151,7 @@ void EditorFileSystem::_update_file_icon_path(EditorFileSystemDirectory::FileInf
 			if (cached) {
 				icon_path = *cached;
 			} else {
-				if (ClassDB::is_parent_class(ResourceLoader::get_resource_type(script_path), SNAME("Script"))) {
+				if (ClassDB::is_parent_class(ResourceLoader::get_resource_type(script_path), Script::get_class_static())) {
 					int script_file;
 					EditorFileSystemDirectory *efsd = find_file(script_path, &script_file);
 					if (efsd) {
@@ -2413,7 +2411,7 @@ void EditorFileSystem::_queue_update_scene_groups(const String &p_path) {
 
 void EditorFileSystem::_get_all_scenes(EditorFileSystemDirectory *p_dir, HashSet<String> &r_list) {
 	for (int i = 0; i < p_dir->get_file_count(); i++) {
-		if (p_dir->get_file_type(i) == SNAME("PackedScene")) {
+		if (p_dir->get_file_type(i) == PackedScene::get_class_static()) {
 			r_list.insert(p_dir->get_file_path(i));
 		}
 	}
@@ -2452,15 +2450,14 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 						ResourceUID::get_singleton()->remove_id(fs->files[cpos]->uid);
 					}
 				}
-				if (ClassDB::is_parent_class(fs->files[cpos]->type, SNAME("Script"))) {
+				if (ClassDB::is_parent_class(fs->files[cpos]->type, Script::get_class_static())) {
 					ScriptClassInfoUpdate update;
 					update.type = fs->files[cpos]->type;
 					_queue_update_script_class(file, update);
 					if (!fs->files[cpos]->class_info.icon_path.is_empty()) {
 						update_files_icon_cache = true;
 					}
-				}
-				if (fs->files[cpos]->type == SNAME("PackedScene")) {
+				} else if (fs->files[cpos]->type == PackedScene::get_class_static()) {
 					_queue_update_scene_groups(file);
 				}
 
@@ -2548,21 +2545,20 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 			// Update preview
 			EditorResourcePreview::get_singleton()->check_for_invalidation(file);
 
-			if (ClassDB::is_parent_class(fi->type, SNAME("Script"))) {
+			if (ClassDB::is_parent_class(fi->type, Script::get_class_static())) {
 				_queue_update_script_class(file, ScriptClassInfoUpdate::from_file_info(fi));
-			}
-			if (fi->type == SNAME("PackedScene")) {
+			} else if (fi->type == PackedScene::get_class_static()) {
 				_queue_update_scene_groups(file);
 			}
 
-			if (ClassDB::is_parent_class(fi->type, SNAME("Resource"))) {
+			if (ClassDB::is_parent_class(fi->type, Resource::get_class_static())) {
 				files_to_update_icon_path.push_back(fi);
 			} else if (old_script_class_icon_path != fi->class_info.icon_path) {
 				update_files_icon_cache = true;
 			}
 
 			// Restore another script as the global class name if multiple scripts had the same old class name.
-			if (!old_class_name.is_empty() && fi->class_info.name != old_class_name && ClassDB::is_parent_class(type, SNAME("Script"))) {
+			if (!old_class_name.is_empty() && fi->class_info.name != old_class_name && ClassDB::is_parent_class(type, Script::get_class_static())) {
 				EditorFileSystemDirectory::FileInfo *old_fi = nullptr;
 				String old_file = _get_file_by_class_name(filesystem, old_class_name, old_fi);
 				if (!old_file.is_empty() && old_fi) {
@@ -3707,7 +3703,7 @@ ResourceUID::ID EditorFileSystem::_resource_saver_get_resource_id_for_path(const
 static void _scan_extensions_dir(EditorFileSystemDirectory *d, HashSet<String> &extensions) {
 	int fc = d->get_file_count();
 	for (int i = 0; i < fc; i++) {
-		if (d->get_file_type(i) == SNAME("GDExtension")) {
+		if (d->get_file_type(i) == GDExtension::get_class_static()) {
 			extensions.insert(d->get_file_path(i));
 		}
 	}
