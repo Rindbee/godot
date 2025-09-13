@@ -271,6 +271,7 @@ class EditorFileSystem : public Node {
 	List<ItemAction> scan_actions;
 
 	bool _action_file_remove(EditorFileSystemDirectory *p_dir, int p_idx, bool immediately = true);
+	bool _action_dir_remove(EditorFileSystemDirectory *p_dir, bool immediately = true);
 
 	bool _update_scan_actions();
 
