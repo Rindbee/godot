@@ -2771,7 +2771,7 @@ void FileSystemDock::_rescan() {
 	}
 
 	_set_scanning_mode();
-	EditorFileSystem::get_singleton()->scan();
+	EditorFileSystem::get_singleton()->scan_changes();
 }
 
 void FileSystemDock::_change_bottom_dock_placement() {
