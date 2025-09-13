@@ -67,10 +67,9 @@ bool ResourceFormatLoader::recognize_path(const String &p_path, const String &p_
 	} else {
 		get_recognized_extensions_for_type(p_for_type, &extensions);
 	}
-
+	const String file = p_path.get_file();
 	for (const String &E : extensions) {
-		const String ext = !E.begins_with(".") ? "." + E : E;
-		if (p_path.right(ext.length()).nocasecmp_to(ext) == 0) {
+		if (file.right(E.length() + 1).nocasecmp_to("." + E) == 0) {
 			return true;
 		}
 	}
