@@ -791,7 +791,7 @@ Vector<String> EditorFileSystem::_get_import_dest_paths(const String &p_path) {
 	return dest_paths;
 }
 
-bool EditorFileSystem::_scan_import_support(const Vector<String> &reimports) {
+bool EditorFileSystem::_import_support_abort_scan(const Vector<String> &reimports) {
 	if (import_support_queries.is_empty()) {
 		return false;
 	}
@@ -1045,7 +1045,7 @@ bool EditorFileSystem::_update_scan_actions() {
 	}
 
 	if (!reimports.is_empty()) {
-		if (_scan_import_support(reimports)) {
+		if (_import_support_abort_scan(reimports)) {
 			return true;
 		}
 
