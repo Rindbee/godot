@@ -1335,7 +1335,7 @@ void EditorFileSystem::_process_file_system(const ScannedDirectory *p_scan_dir, 
 				fi->class_info = _get_global_script_class(fi->type, path);
 				fi->import_md5 = FileAccess::get_md5(path + ".import");
 				fi->import_dest_paths = Vector<String>();
-				fi->import_valid = (fi->type == "TextFile" || fi->type == "OtherFile") ? true : ResourceLoader::is_import_valid(path);
+				fi->import_valid = (fi->type == "TextFile" || fi->type == "OtherFile") || ResourceLoader::is_import_valid(path);
 
 				ItemAction ia;
 				ia.action = ItemAction::ACTION_FILE_TEST_REIMPORT;
@@ -1566,7 +1566,7 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 						}
 					}
 					fi->class_info = _get_global_script_class(fi->type, path);
-					fi->import_valid = (fi->type == "TextFile" || fi->type == "OtherFile") ? true : ResourceLoader::is_import_valid(path);
+					fi->import_valid = (fi->type == "TextFile" || fi->type == "OtherFile") || ResourceLoader::is_import_valid(path);
 					fi->import_group_file = ResourceLoader::get_import_group_file(path);
 
 					{
@@ -2485,7 +2485,7 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 				EditorFileSystemDirectory::FileInfo *fi = memnew(EditorFileSystemDirectory::FileInfo);
 				fi->file = file_name;
 				fi->import_modified_time = 0;
-				fi->import_valid = (type == "TextFile" || type == "OtherFile") ? true : ResourceLoader::is_import_valid(file);
+				fi->import_valid = (type == "TextFile" || type == "OtherFile") || ResourceLoader::is_import_valid(file);
 				fi->import_md5 = "";
 				fi->import_dest_paths = Vector<String>();
 
@@ -2512,7 +2512,7 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 			fi->import_group_file = ResourceLoader::get_import_group_file(file);
 			fi->modified_time = FileAccess::get_modified_time(file);
 			fi->deps = _get_dependencies(file);
-			fi->import_valid = (type == "TextFile" || type == "OtherFile") ? true : ResourceLoader::is_import_valid(file);
+			fi->import_valid = (type == "TextFile" || type == "OtherFile") || ResourceLoader::is_import_valid(file);
 
 			if (uid != ResourceUID::INVALID_ID) {
 				if (ResourceUID::get_singleton()->has_id(uid)) {
@@ -3062,7 +3062,7 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 		fs->files[cpos]->deps = _get_dependencies(p_file);
 		fs->files[cpos]->type = importer->get_resource_type();
 		fs->files[cpos]->uid = uid;
-		fs->files[cpos]->import_valid = fs->files[cpos]->type == "TextFile" ? true : ResourceLoader::is_import_valid(p_file);
+		fs->files[cpos]->import_valid = fs->files[cpos]->type == "TextFile" || ResourceLoader::is_import_valid(p_file);
 	}
 
 	for (const String &path : gen_files) {
