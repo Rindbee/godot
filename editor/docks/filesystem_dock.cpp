@@ -1262,9 +1262,9 @@ void FileSystemDock::_select_file(const String &p_path, bool p_select_in_favorit
 			{
 				List<String> importer_exts;
 				ResourceImporterScene::get_scene_importer_extensions(&importer_exts);
-				String extension = fpath.get_extension();
+				const String file = fpath.get_file();
 				for (const String &E : importer_exts) {
-					if (extension.nocasecmp_to(E) == 0) {
+					if (file.right(E.length() + 1).nocasecmp_to("." + E) == 0) {
 						is_imported = true;
 						break;
 					}
