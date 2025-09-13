@@ -176,6 +176,7 @@ class EditorFileSystem : public Node {
 		~ScannedDirectory();
 	};
 
+	SafeFlag scanning_done;
 	bool use_threads = false;
 	Thread thread;
 	static void _thread_func(void *_userdata);
