@@ -502,8 +502,6 @@ void EditorFileSystem::_scan_filesystem() {
 	// On the first scan, the first_scan_root_dir is created in _first_scan_filesystem.
 	if (first_scan) {
 		sd = first_scan_root_dir;
-		// Will be updated on scan.
-		ResourceUID::get_singleton()->clear();
 		ResourceUID::scan_for_uid_on_startup = nullptr;
 		processed_files = memnew(HashSet<String>());
 	} else {
