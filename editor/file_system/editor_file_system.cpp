@@ -842,6 +842,35 @@ bool EditorFileSystem::_scan_import_support(const Vector<String> &reimports) {
 	return false;
 }
 
+bool EditorFileSystem::_action_file_remove(EditorFileSystemDirectory *p_dir, int p_idx, bool immediately) {
+	const String file_path = p_dir->get_file_path(p_idx);
+	EditorFileSystemDirectory::FileInfo *file_info = p_dir->files[p_idx];
+	const String class_name = file_info->class_info.name;
+
+	if (ClassDB::is_parent_class(file_info->type, Script::get_class_static())) {
+		_queue_update_script_class(file_path, ScriptClassInfoUpdate());
+	} else if (file_info->type == PackedScene::get_class_static()) {
+		_queue_update_scene_groups(file_path);
+	}
+
+	_delete_internal_files(file_path);
+	if (immediately) {
+		memdelete(file_info);
+		p_dir->files.remove_at(p_idx);
+	}
+
+	// Restore another script with the same global class name if it exists.
+	if (!class_name.is_empty()) {
+		EditorFileSystemDirectory::FileInfo *old_fi = nullptr;
+		String old_file = _get_file_by_class_name(filesystem, class_name, old_fi);
+		if (!old_file.is_empty() && old_fi) {
+			_queue_update_script_class(old_file, ScriptClassInfoUpdate::from_file_info(old_fi));
+		}
+	}
+
+	return true;
+}
+
 bool EditorFileSystem::_update_scan_actions() {
 	sources_changed.clear();
 
@@ -944,29 +973,7 @@ bool EditorFileSystem::_update_scan_actions() {
 				int idx = ia.dir->find_file_index(ia.file);
 				ERR_CONTINUE(idx == -1);
 
-				const String file_path = ia.dir->get_file_path(idx);
-				const String class_name = ia.dir->files[idx]->class_info.name;
-				if (ClassDB::is_parent_class(ia.dir->files[idx]->type, SNAME("Script"))) {
-					_queue_update_script_class(file_path, ScriptClassInfoUpdate());
-				}
-				if (ia.dir->files[idx]->type == SNAME("PackedScene")) {
-					_queue_update_scene_groups(file_path);
-				}
-
-				_delete_internal_files(file_path);
-				memdelete(ia.dir->files[idx]);
-				ia.dir->files.remove_at(idx);
-
-				// Restore another script with the same global class name if it exists.
-				if (!class_name.is_empty()) {
-					EditorFileSystemDirectory::FileInfo *old_fi = nullptr;
-					String old_file = _get_file_by_class_name(filesystem, class_name, old_fi);
-					if (!old_file.is_empty() && old_fi) {
-						_queue_update_script_class(old_file, ScriptClassInfoUpdate::from_file_info(old_fi));
-					}
-				}
-
-				fs_changed = true;
+				fs_changed = _action_file_remove(ia.dir, idx);
 
 			} break;
 			case ItemAction::ACTION_FILE_TEST_REIMPORT: {
