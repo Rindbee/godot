@@ -1089,6 +1089,8 @@ void EditorFileSystem::scan() {
 		//file_type_cache.clear();
 		filesystem = new_filesystem;
 		new_filesystem = nullptr;
+		dirty_directories.clear();
+		scan_changes_pending = false;
 		_update_scan_actions();
 		// Update all icons so they are loaded for the FileSystemDock.
 		_update_files_icon_path();
@@ -1387,30 +1389,34 @@ void EditorFileSystem::_process_removed_files(const HashSet<String> &p_processed
 }
 
 void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanProgress &p_progress, bool p_recursive) {
-	uint64_t current_mtime = FileAccess::get_modified_time(p_dir->get_path());
+	p_recursive |= p_dir->recursive;
+	p_dir->dirty = false;
+	p_dir->recursive = false;
 
 	bool updated_dir = false;
-	String cd = p_dir->get_path();
+	const String cd = p_dir->get_path();
 	int diff_nb_files = 0;
+
+	uint64_t current_mtime = FileAccess::get_modified_time(cd);
 
 	if (current_mtime != p_dir->modified_time || using_fat32_or_exfat) {
 		updated_dir = true;
 		p_dir->modified_time = current_mtime;
-		//ooooops, dir changed, see what's going on
+		// Ooooops, dir changed, see what's going on.
 
-		//first mark everything as verified
+		// First mark everything as not verified.
 
 		for (int i = 0; i < p_dir->files.size(); i++) {
 			p_dir->files[i]->verified = false;
 		}
 
 		for (int i = 0; i < p_dir->subdirs.size(); i++) {
-			p_dir->get_subdir(i)->verified = false;
+			p_dir->subdirs[i]->verified = false;
 		}
 
 		diff_nb_files -= p_dir->files.size();
 
-		//then scan files and directories and check what's different
+		// Then scan files and directories and check what's different.
 
 		Ref<DirAccess> da = DirAccess::create(DirAccess::ACCESS_RESOURCES);
 
@@ -1435,7 +1441,7 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 
 				int idx = p_dir->find_dir_index(f);
 				if (idx == -1) {
-					String dir_path = cd.path_join(f);
+					const String dir_path = cd.path_join(f);
 					if (_should_skip_directory(dir_path)) {
 						continue;
 					}
@@ -1473,7 +1479,7 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 				int idx = p_dir->find_file_index(f);
 
 				if (idx == -1) {
-					//never seen this file, add actition to add it
+					// Never seen this file, add actition to add it.
 					EditorFileSystemDirectory::FileInfo *fi = memnew(EditorFileSystemDirectory::FileInfo);
 					fi->file = f;
 
@@ -1524,7 +1530,7 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 
 	for (int i = 0; i < p_dir->files.size(); i++) {
 		if (updated_dir && !p_dir->files[i]->verified) {
-			//this file was removed, add action to remove it
+			// This file was removed, add action to remove it.
 			ItemAction ia;
 			ia.action = ItemAction::ACTION_FILE_REMOVE;
 			ia.dir = p_dir;
@@ -1554,7 +1560,7 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 			uint64_t mt = FileAccess::get_modified_time(path);
 
 			if (mt != p_dir->files[i]->modified_time) {
-				p_dir->files[i]->modified_time = mt; //save new time, but test for reload
+				p_dir->files[i]->modified_time = mt; // Save new time, but test for reload.
 
 				ItemAction ia;
 				ia.action = ItemAction::ACTION_FILE_RELOAD;
@@ -1568,24 +1574,53 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 	}
 
 	for (int i = 0; i < p_dir->subdirs.size(); i++) {
-		if ((updated_dir && !p_dir->subdirs[i]->verified) || _should_skip_directory(p_dir->subdirs[i]->get_path())) {
+		EditorFileSystemDirectory *sub_dir = p_dir->subdirs[i];
+		const String sub_dir_path = sub_dir->get_path();
+		if ((updated_dir && !sub_dir->verified) || _should_skip_directory(sub_dir_path)) {
 			// Add all the files of the folder to be sure _update_scan_actions process the removed files
 			// for global class names.
 			diff_nb_files += _insert_actions_delete_files_directory(p_dir->subdirs[i]);
 
-			//this directory was removed or ignored, add action to remove it
+			// This directory was removed or ignored, add action to remove it.
 			ItemAction ia;
 			ia.action = ItemAction::ACTION_DIR_REMOVE;
-			ia.dir = p_dir->subdirs[i];
+			ia.dir = sub_dir;
 			scan_actions.push_back(ia);
 			continue;
 		}
-		if (p_recursive) {
-			_scan_fs_changes(p_dir->get_subdir(i), p_progress);
+		if (p_recursive || sub_dir->dirty) {
+			_scan_fs_changes(sub_dir, p_progress, p_recursive);
 		}
 	}
 
 	nb_files_total = MAX(nb_files_total + diff_nb_files, 0);
+}
+
+void EditorFileSystem::scan_fs_changes(ScanProgress &p_progress) {
+	List<EditorFileSystemDirectory *>::Element *E = dirty_directories.front();
+	while (E) {
+		EditorFileSystemDirectory *efsd = E->get();
+		E = E->next();
+		dirty_directories.pop_front();
+		if (!efsd->dirty) {
+			continue;
+		}
+		_scan_fs_changes(efsd, p_progress, efsd->recursive);
+	}
+}
+
+void EditorFileSystem::_pending_scan_fs_changes(EditorFileSystemDirectory *p_dir, bool p_recursive) {
+	p_dir->dirty = true;
+	p_dir->recursive |= p_recursive;
+	dirty_directories.push_back(p_dir);
+	scan_changes_pending = true;
+	set_process(true);
+}
+
+void EditorFileSystem::pending_scan_fs_changes(const String &p_dir, bool p_recursive) {
+	EditorFileSystemDirectory *efd = get_filesystem_path(p_dir);
+	ERR_FAIL_NULL(efd);
+	_pending_scan_fs_changes(efd, p_recursive);
 }
 
 void EditorFileSystem::_delete_internal_files(const String &p_file) {
@@ -1628,7 +1663,7 @@ void EditorFileSystem::_thread_func_sources(void *_userdata) {
 		ScanProgress sp;
 		sp.progress = &pr;
 		sp.hi = efs->nb_files_total;
-		efs->_scan_fs_changes(efs->filesystem, sp);
+		efs->scan_fs_changes(sp);
 	}
 	efs->scanning_changes_done.set();
 }
@@ -1664,7 +1699,16 @@ String EditorFileSystem::_get_file_by_class_name(EditorFileSystemDirectory *p_di
 	return "";
 }
 
-void EditorFileSystem::scan_changes() {
+void EditorFileSystem::_scan_dirs_changes(bool p_full_scan) {
+	ERR_FAIL_NULL(filesystem);
+
+	if (p_full_scan) {
+		dirty_directories.clear();
+		filesystem->dirty = true;
+		filesystem->recursive = true;
+		dirty_directories.push_back(filesystem);
+	}
+
 	if (first_scan || // Prevent a premature changes scan from inhibiting the first full scan
 			scanning || scanning_changes || thread.is_started()) {
 		scan_changes_pending = true;
@@ -1684,7 +1728,7 @@ void EditorFileSystem::scan_changes() {
 			sp.progress = &pr;
 			sp.hi = nb_files_total;
 			scan_total = 0;
-			_scan_fs_changes(filesystem, sp);
+			scan_fs_changes(sp);
 			if (_update_scan_actions()) {
 				emit_signal(SNAME("filesystem_changed"));
 			}
@@ -1700,6 +1744,10 @@ void EditorFileSystem::scan_changes() {
 		s.priority = Thread::PRIORITY_LOW;
 		thread_sources.start(_thread_func_sources, this, s);
 	}
+}
+
+void EditorFileSystem::scan_changes() {
+	_scan_dirs_changes();
 }
 
 void EditorFileSystem::_notification(int p_what) {
@@ -1723,6 +1771,8 @@ void EditorFileSystem::_notification(int p_what) {
 			}
 			filesystem = nullptr;
 			new_filesystem = nullptr;
+			dirty_directories.clear();
+			scan_changes_pending = false;
 		} break;
 
 		case NOTIFICATION_PROCESS: {
@@ -1740,27 +1790,23 @@ void EditorFileSystem::_notification(int p_what) {
 
 				prevent_recursive_process_hack = true;
 
-				bool done_importing = false;
+				if (scanning_changes && scanning_changes_done.is_set()) {
+					set_process(false);
 
-				if (scanning_changes) {
-					if (scanning_changes_done.is_set()) {
-						set_process(false);
-
-						if (thread_sources.is_started()) {
-							thread_sources.wait_to_finish();
-						}
-						bool changed = _update_scan_actions();
-						// Set first_scan to false before the signals so the function doing_first_scan can return false
-						// in editor_node to start the export if needed.
-						first_scan = false;
-						scanning_changes = false;
-						done_importing = true;
-						ResourceImporter::load_on_startup = nullptr;
-						if (changed) {
-							emit_signal(SNAME("filesystem_changed"));
-						}
-						emit_signal(SNAME("sources_changed"), sources_changed.size() > 0);
+					if (thread_sources.is_started()) {
+						thread_sources.wait_to_finish();
 					}
+					bool changed = _update_scan_actions();
+					// Set first_scan to false before the signals so the function doing_first_scan can return false
+					// in editor_node to start the export if needed.
+					first_scan = false;
+					scanning_changes = false;
+					ResourceImporter::load_on_startup = nullptr;
+					if (changed) {
+						emit_signal(SNAME("filesystem_changed"));
+					}
+					emit_signal(SNAME("sources_changed"), sources_changed.size() > 0);
+
 				} else if (scanning && scanning_done.is_set()) {
 					set_process(false);
 
@@ -1769,6 +1815,8 @@ void EditorFileSystem::_notification(int p_what) {
 					}
 					filesystem = new_filesystem;
 					new_filesystem = nullptr;
+					dirty_directories.clear();
+					scan_changes_pending = false;
 					thread.wait_to_finish();
 					_update_scan_actions();
 					// Update all icons so they are loaded for the FileSystemDock.
@@ -1782,12 +1830,13 @@ void EditorFileSystem::_notification(int p_what) {
 					emit_signal(SNAME("sources_changed"), sources_changed.size() > 0);
 				}
 
-				if (done_importing && scan_changes_pending) {
-					scan_changes_pending = false;
-					scan_changes();
-				}
-
 				prevent_recursive_process_hack = false;
+			}
+
+			if (!first_scan && !scanning && !scanning_changes && scan_changes_pending) {
+				set_process(false);
+				scan_changes_pending = false;
+				_scan_dirs_changes(false);
 			}
 		} break;
 	}
@@ -3520,11 +3569,16 @@ Error EditorFileSystem::make_dir_recursive(const String &p_path, const String &p
 	folders_to_sort.insert(parent->get_instance_id());
 
 	const PackedStringArray folders = p_path.trim_prefix(path).split("/", false);
+	bool exists = true;
 	for (const String &folder : folders) {
-		const int current = parent->find_dir_index(folder);
-		if (current > -1) {
-			parent = parent->get_subdir(current);
-			continue;
+		if (exists) {
+			const int current = parent->find_dir_index(folder);
+			if (current > -1) {
+				parent = parent->get_subdir(current);
+				continue;
+			}
+			exists = false;
+			_pending_scan_fs_changes(parent);
 		}
 
 		EditorFileSystemDirectory *efd = memnew(EditorFileSystemDirectory);
@@ -3544,8 +3598,7 @@ Error EditorFileSystem::copy_file(const String &p_from, const String &p_to) {
 	EditorFileSystemDirectory *parent = get_filesystem_path(p_to.get_base_dir());
 	ERR_FAIL_NULL_V(parent, ERR_FILE_NOT_FOUND);
 
-	ScanProgress sp;
-	_scan_fs_changes(parent, sp, false);
+	_pending_scan_fs_changes(parent, false);
 
 	_queue_refresh_filesystem();
 	return OK;
@@ -3599,8 +3652,7 @@ Error EditorFileSystem::copy_directory(const String &p_from, const String &p_to)
 
 	folders_to_sort.insert(efd->get_parent()->get_instance_id());
 
-	ScanProgress sp;
-	_scan_fs_changes(efd, sp);
+	_pending_scan_fs_changes(efd);
 
 	_queue_refresh_filesystem();
 	return success ? OK : FAILED;
