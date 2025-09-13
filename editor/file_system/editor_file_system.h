@@ -48,6 +48,8 @@ class EditorFileSystemDirectory : public Object {
 	String name;
 	uint64_t modified_time;
 	bool verified = false; // Used for checking changes.
+	bool dirty = false; // The files in the current directory need to be checked.
+	bool recursive = false; // Recursive checking is required.
 
 	EditorFileSystemDirectory *parent = nullptr;
 	Vector<EditorFileSystemDirectory *> subdirs;
@@ -251,7 +253,12 @@ class EditorFileSystem : public Node {
 
 	bool _find_file(const String &p_file, EditorFileSystemDirectory **r_d, int &r_file_pos) const;
 
+	List<EditorFileSystemDirectory *> dirty_directories;
+
 	void _scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanProgress &p_progress, bool p_recursive = true);
+	void scan_fs_changes(ScanProgress &p_progress);
+	void _pending_scan_fs_changes(EditorFileSystemDirectory *p_dir, bool p_recursive = true);
+	void _scan_dirs_changes(bool p_full_scan = true);
 
 	void _delete_internal_files(const String &p_file);
 
@@ -394,6 +401,7 @@ public:
 	float get_scanning_progress() const;
 	void scan();
 	void scan_changes();
+	void pending_scan_fs_changes(const String &p_dir, bool p_recursive);
 	void update_file(const String &p_file);
 	void update_files(const Vector<String> &p_script_paths);
 	HashSet<String> get_valid_extensions() const;
