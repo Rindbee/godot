@@ -91,6 +91,23 @@ int EditorFileSystemDirectory::get_file_count() const {
 	return files.size();
 }
 
+int EditorFileSystemDirectory::get_element_count(bool p_recursive, bool p_include_dirs, bool p_exclude_files) const {
+	ERR_FAIL_COND_V(!p_include_dirs && p_exclude_files, 0);
+	int count = 0;
+	if (p_include_dirs) {
+		count += subdirs.size();
+	}
+	if (!p_exclude_files) {
+		count += files.size();
+	}
+	if (p_recursive) {
+		for (EditorFileSystemDirectory *E : subdirs) {
+			count += E->get_element_count(p_recursive, p_include_dirs, p_exclude_files);
+		}
+	}
+	return count;
+}
+
 String EditorFileSystemDirectory::get_file(int p_idx) const {
 	ERR_FAIL_INDEX_V(p_idx, files.size(), "");
 
@@ -871,6 +888,25 @@ bool EditorFileSystem::_action_file_remove(EditorFileSystemDirectory *p_dir, int
 	return true;
 }
 
+bool EditorFileSystem::_action_dir_remove(EditorFileSystemDirectory *p_dir, bool immediately) {
+	bool files_changed = p_dir->files.size() > 0;
+
+	for (int idx = 0; idx < p_dir->files.size(); idx++) {
+		_action_file_remove(p_dir, idx, false);
+	}
+
+	for (EditorFileSystemDirectory *sub_dir : p_dir->subdirs) {
+		files_changed |= _action_dir_remove(sub_dir, false);
+	}
+
+	if (immediately) {
+		p_dir->parent->subdirs.erase(p_dir);
+		memdelete(p_dir);
+	}
+
+	return files_changed;
+}
+
 bool EditorFileSystem::_update_scan_actions() {
 	sources_changed.clear();
 
@@ -911,8 +947,7 @@ bool EditorFileSystem::_update_scan_actions() {
 			} break;
 			case ItemAction::ACTION_DIR_REMOVE: {
 				ERR_CONTINUE(!ia.dir->parent);
-				ia.dir->parent->subdirs.erase(ia.dir);
-				memdelete(ia.dir);
+				_action_dir_remove(ia.dir);
 				fs_changed = true;
 			} break;
 			case ItemAction::ACTION_FILE_ADD: {
@@ -1625,7 +1660,7 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 		if ((updated_dir && !p_dir->subdirs[i]->verified) || _should_skip_directory(p_dir->subdirs[i]->get_path())) {
 			// Add all the files of the folder to be sure _update_scan_actions process the removed files
 			// for global class names.
-			diff_nb_files += _insert_actions_delete_files_directory(p_dir->subdirs[i]);
+			diff_nb_files += p_dir->subdirs[i]->get_element_count(true);
 
 			//this directory was removed or ignored, add action to remove it
 			ItemAction ia;
@@ -1655,24 +1690,6 @@ void EditorFileSystem::_delete_internal_files(const String &p_file) {
 	if (FileAccess::exists(p_file + ".uid")) {
 		DirAccess::remove_absolute(p_file + ".uid");
 	}
-}
-
-int EditorFileSystem::_insert_actions_delete_files_directory(EditorFileSystemDirectory *p_dir) {
-	int nb_files = 0;
-	for (EditorFileSystemDirectory::FileInfo *fi : p_dir->files) {
-		ItemAction ia;
-		ia.action = ItemAction::ACTION_FILE_REMOVE;
-		ia.dir = p_dir;
-		ia.file = fi->file;
-		scan_actions.push_back(ia);
-		nb_files++;
-	}
-
-	for (EditorFileSystemDirectory *sub_dir : p_dir->subdirs) {
-		nb_files += _insert_actions_delete_files_directory(sub_dir);
-	}
-
-	return nb_files;
 }
 
 void EditorFileSystem::_thread_func_sources(void *_userdata) {

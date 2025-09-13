@@ -89,6 +89,7 @@ public:
 	int get_subdir_count() const;
 	EditorFileSystemDirectory *get_subdir(int p_idx);
 	int get_file_count() const;
+	int get_element_count(bool p_recursive = false, bool p_include_dirs = false, bool p_exclude_files = false) const;
 	String get_file(int p_idx) const;
 	String get_file_path(int p_idx) const;
 	StringName get_file_type(int p_idx) const;
@@ -251,7 +252,6 @@ class EditorFileSystem : public Node {
 	void _scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanProgress &p_progress, bool p_recursive = true);
 
 	void _delete_internal_files(const String &p_file);
-	int _insert_actions_delete_files_directory(EditorFileSystemDirectory *p_dir);
 
 	HashSet<String> textfile_extensions;
 	HashSet<String> other_file_extensions;
@@ -271,6 +271,7 @@ class EditorFileSystem : public Node {
 	List<ItemAction> scan_actions;
 
 	bool _action_file_remove(EditorFileSystemDirectory *p_dir, int p_idx, bool immediately = true);
+	bool _action_dir_remove(EditorFileSystemDirectory *p_dir, bool immediately = true);
 
 	bool _update_scan_actions();
 
