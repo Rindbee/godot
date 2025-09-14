@@ -208,10 +208,6 @@ class EditorFileSystem : public Node {
 
 	static void _load_first_scan_root_dir();
 
-	HashSet<String> late_update_files;
-
-	void _save_late_updated_files();
-
 	EditorFileSystemDirectory *filesystem = nullptr;
 
 	static EditorFileSystem *singleton;

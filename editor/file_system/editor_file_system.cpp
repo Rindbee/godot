@@ -2186,16 +2186,6 @@ EditorFileSystemDirectory *EditorFileSystem::get_filesystem_path(const String &p
 	return fs;
 }
 
-void EditorFileSystem::_save_late_updated_files() {
-	//files that already existed, and were modified, need re-scanning for dependencies upon project restart. This is done via saving this special file
-	String fscache = EditorPaths::get_singleton()->get_project_settings_dir().path_join("filesystem_update4");
-	Ref<FileAccess> f = FileAccess::open(fscache, FileAccess::WRITE);
-	ERR_FAIL_COND_MSG(f.is_null(), "Cannot create file '" + fscache + "'. Check user write permissions.");
-	for (const String &E : late_update_files) {
-		f->store_line(E);
-	}
-}
-
 Vector<String> EditorFileSystem::_get_dependencies(const String &p_path) {
 	// Avoid error spam on first opening of a not yet imported project by treating the following situation
 	// as a benign one, not letting the file open error happen: the resource is of an importable type but
@@ -2595,11 +2585,6 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 					fs->files.insert(idx, fi);
 				}
 				cpos = idx;
-			} else {
-				//the file exists and it was updated, and was not added in this step.
-				//this means we must force upon next restart to scan it again, to get proper type and dependencies
-				late_update_files.insert(file);
-				_save_late_updated_files(); //files need to be updated in the re-scan
 			}
 
 			EditorFileSystemDirectory::FileInfo *fi = fs->files[cpos];
