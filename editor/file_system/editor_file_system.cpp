@@ -514,6 +514,26 @@ bool EditorFileSystem::_load_filesystem_from_cache() {
 	return true;
 }
 
+bool EditorFileSystem::_mark_dirty_dirs_from_cache() {
+	const String update_cache = EditorPaths::get_singleton()->get_project_settings_dir().path_join("filesystem_update4");
+	Ref<FileAccess> f = FileAccess::open(update_cache, FileAccess::READ);
+	if (f.is_null()) {
+		return false;
+	}
+
+	String l = f->get_line().strip_edges();
+	while (!l.is_empty()) {
+		dep_update_list.insert(l);
+		pending_scan_fs_changes(l.get_base_dir(), false);
+		l = f->get_line().strip_edges();
+	}
+
+	Ref<DirAccess> d = DirAccess::create(DirAccess::ACCESS_RESOURCES);
+	d->remove(update_cache); // Bye bye update cache.
+
+	return true;
+}
+
 void EditorFileSystem::_scan_filesystem() {
 	// On the first scan, the first_scan_root_dir is created in _first_scan_filesystem.
 	ERR_FAIL_COND(!scanning || new_filesystem || (first_scan && !first_scan_root_dir));

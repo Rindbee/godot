@@ -199,6 +199,7 @@ class EditorFileSystem : public Node {
 	static int nb_files_total;
 
 	bool _load_filesystem_from_cache();
+	bool _mark_dirty_dirs_from_cache();
 
 	void _notify_filesystem_changed();
 	void _scan_filesystem();
