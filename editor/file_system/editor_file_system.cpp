@@ -404,6 +404,116 @@ void EditorFileSystem::_first_scan_process_scripts(const ScannedDirectory *p_sca
 	}
 }
 
+bool EditorFileSystem::_load_filesystem_from_cache() {
+	const String fscache = EditorPaths::get_singleton()->get_project_settings_dir().path_join(CACHE_FILE_NAME);
+	Ref<FileAccess> f = FileAccess::open(fscache, FileAccess::READ);
+	if (f.is_null()) {
+		return false;
+	}
+
+	// Read the disk cache.
+	Vector<String> dirs;
+	String cpath;
+	EditorFileSystemDirectory *cur_dir = nullptr;
+
+	bool is_first_line = true;
+	while (!f->eof_reached()) {
+		String l = f->get_line().strip_edges();
+		if (is_first_line) {
+			filesystem_settings_version_for_import = l;
+			revalidate_import_files = filesystem_settings_version_for_import != ResourceFormatImporter::get_singleton()->get_import_settings_hash();
+			is_first_line = false;
+			continue;
+		}
+		if (l.is_empty()) {
+			continue;
+		}
+
+		// Directory entries.
+		if (l.begins_with("::")) {
+			Vector<String> split = l.split("::");
+			ERR_CONTINUE(split.size() != 3);
+			cpath = split[1];
+			if (cpath == "res://") {
+				cur_dir = filesystem;
+				cur_dir->modified_time = split[2].to_int();
+				continue;
+			}
+
+			EditorFileSystemDirectory *parent = cur_dir;
+			Vector<String> prev_dirs = dirs;
+			dirs = cpath.substr(6, cpath.length() - 7).split("/");
+
+			int common_ancestor_count = 0;
+			int amount = prev_dirs.size();
+			bool fetch = false;
+			while (common_ancestor_count != amount) {
+				if (fetch) {
+					parent = parent->parent;
+					amount--;
+				} else {
+					fetch = prev_dirs[common_ancestor_count] != dirs[common_ancestor_count];
+					if (fetch) {
+						continue;
+					}
+					fetch = common_ancestor_count == dirs.size() - 1;
+					common_ancestor_count++;
+				}
+			}
+
+			while (common_ancestor_count < dirs.size() - 1) {
+				int idx = parent->find_dir_index(dirs[common_ancestor_count]);
+				if (idx == -1) {
+					EditorFileSystemDirectory *lost = memnew(EditorFileSystemDirectory);
+					lost->name = dirs[common_ancestor_count];
+					lost->parent = parent;
+					lost->parent->subdirs.push_back(lost);
+				} else {
+					parent = parent->get_subdir(idx);
+				}
+				common_ancestor_count++;
+			}
+
+			cur_dir = memnew(EditorFileSystemDirectory);
+			cur_dir->name = dirs[dirs.size() - 1];
+			cur_dir->parent = parent;
+			cur_dir->parent->subdirs.push_back(cur_dir);
+			cur_dir->modified_time = split[2].to_int();
+			continue;
+		}
+
+		// The last section (deps) may contain the same splitter, so limit the maxsplit to 8 to get the complete deps.
+		Vector<String> split = l.split("::", true, 8);
+		ERR_CONTINUE(split.size() < 9);
+
+		EditorFileSystemDirectory::FileInfo *fi = memnew(EditorFileSystemDirectory::FileInfo);
+		cur_dir->files.push_back(fi);
+
+		fi->file = split[0];
+		fi->type = split[1].get_slicec('/', 0);
+		fi->resource_script_class = split[1].get_slicec('/', 1);
+		fi->uid = split[2].to_int();
+		fi->modified_time = split[3].to_int();
+		fi->import_modified_time = split[4].to_int();
+		fi->import_valid = split[5].to_int() != 0;
+		fi->import_group_file = split[6].strip_edges();
+		{
+			const Vector<String> &slices = split[7].split("<>");
+			ERR_CONTINUE(slices.size() < 7);
+			fi->class_info.name = slices[0];
+			fi->class_info.extends = slices[1];
+			fi->class_info.icon_path = slices[2];
+			fi->class_info.is_abstract = slices[3].to_int();
+			fi->class_info.is_tool = slices[4].to_int();
+			fi->import_md5 = slices[5];
+			fi->import_dest_paths = slices[6].split("<*>");
+		}
+		fi->deps = split[8].strip_edges().split("<>", false);
+	}
+
+	return true;
+}
+
 void EditorFileSystem::_scan_filesystem() {
 	// On the first scan, the first_scan_root_dir is created in _first_scan_filesystem.
 	ERR_FAIL_COND(!scanning || new_filesystem || (first_scan && !first_scan_root_dir));

@@ -198,6 +198,8 @@ class EditorFileSystem : public Node {
 	bool revalidate_import_files = false;
 	static int nb_files_total;
 
+	bool _load_filesystem_from_cache();
+
 	void _notify_filesystem_changed();
 	void _scan_filesystem();
 	void _first_scan_filesystem();
