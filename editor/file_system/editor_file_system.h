@@ -279,6 +279,7 @@ class EditorFileSystem : public Node {
 
 	List<String> sources_changed;
 	List<ItemAction> scan_actions;
+	List<ItemAction>::Element *insertion_point; // Used to prioritize removal actions.
 
 	bool _action_file_remove(EditorFileSystemDirectory *p_dir, int p_idx, bool immediately = true);
 	bool _action_dir_remove(EditorFileSystemDirectory *p_dir, bool immediately = true);

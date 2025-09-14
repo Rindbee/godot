@@ -1608,7 +1608,7 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 			ia.action = ItemAction::ACTION_FILE_REMOVE;
 			ia.dir = p_dir;
 			ia.file = p_dir->files[i]->file;
-			scan_actions.push_back(ia);
+			scan_actions.insert_after(insertion_point, ia);
 			diff_nb_files--;
 			continue;
 		}
@@ -1656,7 +1656,7 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 			ItemAction ia;
 			ia.action = ItemAction::ACTION_DIR_REMOVE;
 			ia.dir = p_dir->subdirs[i];
-			scan_actions.push_back(ia);
+			scan_actions.insert_after(insertion_point, ia);
 			continue;
 		}
 		if (p_recursive) {
@@ -1669,6 +1669,9 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 
 void EditorFileSystem::scan_fs_changes(ScanProgress &p_progress) {
 	List<EditorFileSystemDirectory *>::Element *E = dirty_directories.front();
+	ERR_FAIL_NULL(E);
+	ItemAction ia; // Empty action, only used to insert dir/file removal action in this loop.
+	insertion_point = scan_actions.push_back(ia);
 	while (E) {
 		EditorFileSystemDirectory *efsd = E->get();
 		E = E->next();
