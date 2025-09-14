@@ -849,6 +849,19 @@ bool EditorFileSystem::_import_support_abort_scan(const Vector<String> &reimport
 	return false;
 }
 
+bool EditorFileSystem::_action_dir_add(EditorFileSystemDirectory *p_dir) {
+	ScannedDirectory sd;
+	sd.name = p_dir->name;
+	sd.full_path = p_dir->get_path();
+
+	Ref<DirAccess> d = DirAccess::create(DirAccess::ACCESS_RESOURCES);
+	d->change_dir(sd.full_path);
+	ScanProgress sp;
+	sp.hi = _scan_new_dir(&sd, d);
+	_process_file_system(&sd, p_dir, sp, nullptr);
+	return true;
+}
+
 bool EditorFileSystem::_action_file_remove(EditorFileSystemDirectory *p_dir, int p_idx, bool immediately) {
 	const String file_path = p_dir->get_file_path(p_idx);
 	EditorFileSystemDirectory::FileInfo *file_info = p_dir->files[p_idx];
@@ -933,7 +946,7 @@ bool EditorFileSystem::_update_scan_actions() {
 					ia.dir->subdirs.insert(idx, ia.new_dir);
 				}
 
-				fs_changed = true;
+				fs_changed = _action_dir_add(ia.new_dir);
 			} break;
 			case ItemAction::ACTION_DIR_REMOVE: {
 				ERR_CONTINUE(!ia.dir->parent);
@@ -1519,20 +1532,11 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 						continue;
 					}
 
-					ScannedDirectory sd;
-					sd.name = f;
-					sd.full_path = dir_path;
+					// Defer processing of file additions to avoid cluttering the uid cache.
 
 					EditorFileSystemDirectory *efd = memnew(EditorFileSystemDirectory);
 					efd->parent = p_dir;
 					efd->name = f;
-
-					Ref<DirAccess> d = DirAccess::create(DirAccess::ACCESS_RESOURCES);
-					d->change_dir(dir_path);
-					int nb_files_dir = _scan_new_dir(&sd, d);
-					p_progress.hi += nb_files_dir;
-					diff_nb_files += nb_files_dir;
-					_process_file_system(&sd, efd, p_progress, nullptr);
 
 					ItemAction ia;
 					ia.action = ItemAction::ACTION_DIR_ADD;
