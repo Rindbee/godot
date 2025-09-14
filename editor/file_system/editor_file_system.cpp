@@ -1808,6 +1808,7 @@ void EditorFileSystem::scan_changes() {
 void EditorFileSystem::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_EXIT_TREE: {
+			bool save_cache = true;
 			Thread &active_thread = thread.is_started() ? thread : thread_sources;
 			if (use_threads && active_thread.is_started()) {
 				while (!scanning_done.is_set()) {
@@ -1816,9 +1817,13 @@ void EditorFileSystem::_notification(int p_what) {
 				active_thread.wait_to_finish();
 				WARN_PRINT("Scan thread aborted...");
 				set_process(false);
+				save_cache = false;
 			}
 
 			if (filesystem) {
+				if (save_cache) {
+					_save_filesystem_cache();
+				}
 				memdelete(filesystem);
 			}
 			if (new_filesystem) {
