@@ -1606,33 +1606,34 @@ void EditorFileSystem::_process_removed_files(const HashSet<String> &p_processed
 }
 
 void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanProgress &p_progress, bool p_recursive) {
+	p_recursive |= p_dir->recursive;
 	p_dir->dirty = false;
 	p_dir->recursive = false;
 
-	uint64_t current_mtime = FileAccess::get_modified_time(p_dir->get_path());
-
 	bool updated_dir = false;
-	String cd = p_dir->get_path();
+	const String cd = p_dir->get_path();
 	int diff_nb_files = 0;
+
+	uint64_t current_mtime = FileAccess::get_modified_time(cd);
 
 	if (current_mtime != p_dir->modified_time || using_fat32_or_exfat) {
 		updated_dir = true;
 		p_dir->modified_time = current_mtime;
-		//ooooops, dir changed, see what's going on
+		// Ooooops, dir changed, see what's going on.
 
-		//first mark everything as verified
+		// First mark everything as not verified.
 
 		for (int i = 0; i < p_dir->files.size(); i++) {
 			p_dir->files[i]->verified = false;
 		}
 
 		for (int i = 0; i < p_dir->subdirs.size(); i++) {
-			p_dir->get_subdir(i)->verified = false;
+			p_dir->subdirs[i]->verified = false;
 		}
 
 		diff_nb_files -= p_dir->files.size();
 
-		//then scan files and directories and check what's different
+		// Then scan files and directories and check what's different.
 
 		Ref<DirAccess> da = DirAccess::create(DirAccess::ACCESS_RESOURCES);
 
@@ -1657,7 +1658,7 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 
 				int idx = p_dir->find_dir_index(f);
 				if (idx == -1) {
-					String dir_path = cd.path_join(f);
+					const String dir_path = cd.path_join(f);
 					if (_should_skip_directory(dir_path)) {
 						continue;
 					}
@@ -1686,7 +1687,7 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 				int idx = p_dir->find_file_index(f);
 
 				if (idx == -1) {
-					//never seen this file, add actition to add it
+					// Never seen this file, add actition to add it.
 					EditorFileSystemDirectory::FileInfo *fi = memnew(EditorFileSystemDirectory::FileInfo);
 					fi->file = f;
 
@@ -1737,7 +1738,7 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 
 	for (int i = 0; i < p_dir->files.size(); i++) {
 		if (updated_dir && !p_dir->files[i]->verified) {
-			//this file was removed, add action to remove it
+			// This file was removed, add action to remove it.
 			ItemAction ia;
 			ia.action = ItemAction::ACTION_FILE_REMOVE;
 			ia.dir = p_dir;
@@ -1767,7 +1768,7 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 			uint64_t mt = FileAccess::get_modified_time(path);
 
 			if (mt != p_dir->files[i]->modified_time) {
-				p_dir->files[i]->modified_time = mt; //save new time, but test for reload
+				p_dir->files[i]->modified_time = mt; // Save new time, but test for reload.
 
 				ItemAction ia;
 				ia.action = ItemAction::ACTION_FILE_RELOAD;
@@ -1781,20 +1782,22 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 	}
 
 	for (int i = 0; i < p_dir->subdirs.size(); i++) {
-		if ((updated_dir && !p_dir->subdirs[i]->verified) || _should_skip_directory(p_dir->subdirs[i]->get_path())) {
+		EditorFileSystemDirectory *sub_dir = p_dir->subdirs[i];
+		const String sub_dir_path = sub_dir->get_path();
+		if ((updated_dir && !sub_dir->verified) || _should_skip_directory(sub_dir_path)) {
 			// Add all the files of the folder to be sure _update_scan_actions process the removed files
 			// for global class names.
-			diff_nb_files += p_dir->subdirs[i]->get_element_count(true);
+			diff_nb_files += sub_dir->get_element_count(true);
 
-			//this directory was removed or ignored, add action to remove it
+			// This directory was removed or ignored, add action to remove it.
 			ItemAction ia;
 			ia.action = ItemAction::ACTION_DIR_REMOVE;
-			ia.dir = p_dir->subdirs[i];
+			ia.dir = sub_dir;
 			scan_actions.insert_after(insertion_point, ia);
 			continue;
 		}
-		if (p_recursive) {
-			_scan_fs_changes(p_dir->get_subdir(i), p_progress);
+		if (p_recursive || sub_dir->dirty) {
+			_scan_fs_changes(sub_dir, p_progress, p_recursive);
 		}
 	}
 

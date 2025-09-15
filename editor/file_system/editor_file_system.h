@@ -48,8 +48,8 @@ class EditorFileSystemDirectory : public Object {
 	String name;
 	uint64_t modified_time;
 	bool verified = false; // Used for checking changes.
-	bool dirty = false; // The files in the current directory need to be checked.
-	bool recursive = false; // Recursive checking is required.
+	bool dirty = true; // The files in the current directory need to be checked.
+	bool recursive = true; // Recursive checking is required.
 
 	EditorFileSystemDirectory *parent = nullptr;
 	Vector<EditorFileSystemDirectory *> subdirs;
