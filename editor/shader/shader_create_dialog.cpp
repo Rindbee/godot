@@ -467,7 +467,7 @@ String ShaderCreateDialog::_validate_path(const String &p_path) {
 	}
 
 	const ShaderCreateDialog::ShaderTypeData &current_type_data = type_data.get(current_type);
-	const String file_extension = stripped_file_path.get_extension();
+	const String file = stripped_file_path.get_file();
 	HashSet<String> extensions;
 
 	List<ShaderCreateDialog::ShaderTypeData>::ConstIterator itr = type_data.begin();
@@ -483,10 +483,10 @@ String ShaderCreateDialog::_validate_path(const String &p_path) {
 	bool match = false;
 
 	for (const String &ext : extensions) {
-		if (ext.nocasecmp_to(file_extension) == 0) {
+		if (file.right(ext.length() + 1).nocasecmp_to("." + ext) == 0) {
 			found = true;
 			for (const String &type_ext : current_type_data.extensions) {
-				if (type_ext.nocasecmp_to(file_extension) == 0) {
+				if (file.right(type_ext.length() + 1).nocasecmp_to("." + type_ext) == 0) {
 					match = true;
 					break;
 				}
