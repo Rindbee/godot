@@ -360,6 +360,7 @@ void EditorFileSystem::_first_scan_filesystem() {
 	EditorNode::get_singleton()->init_plugins();
 
 	ep.step(TTR("Starting file scan..."), 5, true);
+	update_extensions();
 }
 
 void EditorFileSystem::_first_scan_process_scripts(const ScannedDirectory *p_scan_dir, List<String> &p_gdextension_extensions, HashSet<String> &p_existing_class_names, HashSet<String> &p_extensions) {
@@ -1273,7 +1274,6 @@ void EditorFileSystem::scan() {
 #endif
 	}
 
-	_update_extensions();
 	scanning_done.clear();
 	scanning = true;
 	scan_total = 0;
@@ -1292,6 +1292,7 @@ void EditorFileSystem::scan() {
 		_update_scan_actions();
 		// Update all icons so they are loaded for the FileSystemDock.
 		_update_files_icon_path();
+		scanning_settings_changed = false;
 		scanning = false;
 		// Set first_scan to false before the signals so the function doing_first_scan can return false
 		// in editor_node to start the export if needed.
@@ -1616,7 +1617,7 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 
 	uint64_t current_mtime = FileAccess::get_modified_time(cd);
 
-	if (current_mtime != p_dir->modified_time || using_fat32_or_exfat) {
+	if (current_mtime != p_dir->modified_time || scanning_settings_changed || using_fat32_or_exfat) {
 		updated_dir = true;
 		p_dir->modified_time = current_mtime;
 		// Ooooops, dir changed, see what's going on.
@@ -1908,7 +1909,6 @@ void EditorFileSystem::_scan_dirs_changes(bool p_full_scan) {
 		return;
 	}
 
-	_update_extensions();
 	sources_changed.clear();
 	scanning_changes = true;
 	scanning_changes_done.clear();
@@ -1928,6 +1928,7 @@ void EditorFileSystem::_scan_dirs_changes(bool p_full_scan) {
 				emit_signal(SNAME("filesystem_changed"));
 			}
 		}
+		scanning_settings_changed = false;
 		scanning_changes = false;
 		scanning_changes_done.set();
 		emit_signal(SNAME("sources_changed"), sources_changed.size() > 0);
@@ -2000,6 +2001,7 @@ void EditorFileSystem::_notification(int p_what) {
 					// Set first_scan to false before the signals so the function doing_first_scan can return false
 					// in editor_node to start the export if needed.
 					first_scan = false;
+					scanning_settings_changed = false;
 					scanning_changes = false;
 					ResourceImporter::load_on_startup = nullptr;
 					if (changed) {
@@ -2021,6 +2023,7 @@ void EditorFileSystem::_notification(int p_what) {
 					_update_scan_actions();
 					// Update all icons so they are loaded for the FileSystemDock.
 					_update_files_icon_path();
+					scanning_settings_changed = false;
 					scanning = false;
 					// Set first_scan to false before the signals so the function doing_first_scan can return false
 					// in editor_node to start the export if needed.
@@ -3927,7 +3930,7 @@ void EditorFileSystem::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("resources_reload", PropertyInfo(Variant::PACKED_STRING_ARRAY, "resources")));
 }
 
-void EditorFileSystem::_update_extensions() {
+void EditorFileSystem::update_extensions() {
 	valid_extensions.clear();
 	import_extensions.clear();
 	textfile_extensions.clear();
@@ -3960,6 +3963,11 @@ void EditorFileSystem::_update_extensions() {
 	ResourceFormatImporter::get_singleton()->get_recognized_extensions(&extensionsl);
 	for (const String &E : extensionsl) {
 		import_extensions.insert(E);
+	}
+
+	scanning_settings_changed = true;
+	if (!first_scan) {
+		_scan_dirs_changes();
 	}
 }
 

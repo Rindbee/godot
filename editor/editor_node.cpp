@@ -1028,7 +1028,7 @@ void EditorNode::_notification(int p_what) {
 				if (!extensions_match || updated_textfile_extensions.size() < textfile_extensions.size() || updated_other_file_extensions.size() < other_file_extensions.size()) {
 					textfile_extensions = updated_textfile_extensions;
 					other_file_extensions = updated_other_file_extensions;
-					EditorFileSystem::get_singleton()->scan_changes();
+					EditorFileSystem::get_singleton()->update_extensions();
 				}
 			}
 
