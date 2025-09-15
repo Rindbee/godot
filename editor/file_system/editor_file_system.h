@@ -180,6 +180,7 @@ class EditorFileSystem : public Node {
 		~ScannedDirectory();
 	};
 
+	bool scanning_settings_changed = true;
 	SafeFlag scanning_done = SafeFlag(true);
 	bool use_threads = false;
 	Thread thread;
@@ -289,8 +290,6 @@ class EditorFileSystem : public Node {
 	bool _action_dir_remove(EditorFileSystemDirectory *p_dir, bool immediately = true);
 
 	bool _update_scan_actions();
-
-	void _update_extensions();
 
 	Error _reimport_file(const String &p_file, const HashMap<StringName, Variant> &p_custom_options = HashMap<StringName, Variant>(), const String &p_custom_importer = String(), Variant *generator_parameters = nullptr, bool p_update_file_system = true);
 	Error _reimport_group(const String &p_group_file, const Vector<String> &p_files);
@@ -404,6 +403,7 @@ public:
 	bool is_importing() const { return importing; }
 	bool doing_first_scan() const { return first_scan; }
 	float get_scanning_progress() const;
+	void update_extensions();
 	void scan();
 	void scan_changes();
 	void pending_scan_fs_changes(const String &p_dir, bool p_recursive);
