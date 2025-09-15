@@ -299,7 +299,7 @@ void FileSystemDock::_create_tree(TreeItem *p_parent, EditorFileSystemDirectory 
 			FileInfo file_info;
 			file_info.name = p_dir->get_file(i);
 			file_info.type = p_dir->get_file_type(i);
-			file_info.icon_path = p_dir->get_file_icon_path(i);
+			file_info.icon_path = ClassDB::is_parent_class(file_info.type, Script::get_class_static()) ? "" : p_dir->get_file_icon_path(i);
 			file_info.import_broken = !p_dir->get_file_import_is_valid(i);
 			file_info.modified_time = p_dir->get_file_modified_time(i);
 
@@ -1041,7 +1041,7 @@ void FileSystemDock::_update_file_list(bool p_keep_selection) {
 				file_info.path = favorite;
 				if (efd) {
 					file_info.type = efd->get_file_type(index);
-					file_info.icon_path = efd->get_file_icon_path(index);
+					file_info.icon_path = ClassDB::is_parent_class(file_info.type, Script::get_class_static()) ? "" : efd->get_file_icon_path(index);
 					file_info.import_broken = !efd->get_file_import_is_valid(index);
 					file_info.modified_time = efd->get_file_modified_time(index);
 				} else {
@@ -1141,7 +1141,7 @@ void FileSystemDock::_update_file_list(bool p_keep_selection) {
 				file_info.name = efd->get_file(i);
 				file_info.path = directory.path_join(file_info.name);
 				file_info.type = efd->get_file_type(i);
-				file_info.icon_path = efd->get_file_icon_path(i);
+				file_info.icon_path = ClassDB::is_parent_class(file_info.type, Script::get_class_static()) ? "" : efd->get_file_icon_path(i);
 				file_info.import_broken = !efd->get_file_import_is_valid(i);
 				file_info.modified_time = efd->get_file_modified_time(i);
 
@@ -1289,9 +1289,9 @@ void FileSystemDock::_select_file(const String &p_path, bool p_select_in_favorit
 			{
 				List<String> importer_exts;
 				ResourceImporterScene::get_scene_importer_extensions(&importer_exts);
-				String extension = fpath.get_extension();
+				const String file = fpath.get_file();
 				for (const String &E : importer_exts) {
-					if (extension.nocasecmp_to(E) == 0) {
+					if (file.right(E.length() + 1).nocasecmp_to("." + E) == 0) {
 						is_imported = true;
 						break;
 					}
@@ -1654,7 +1654,7 @@ void FileSystemDock::_update_dependencies_after_move(const HashMap<String, Strin
 	}
 }
 
-void FileSystemDock::_update_project_settings_after_move(const HashMap<String, String> &p_renames, const HashMap<String, String> &p_folders_renames) {
+void FileSystemDock::_update_project_settings_after_move(const HashMap<String, String> &p_renames) {
 	// Find all project settings of type FILE and replace them if needed.
 	const HashMap<StringName, PropertyInfo> prop_info = ProjectSettings::get_singleton()->get_custom_property_info();
 	for (const KeyValue<StringName, PropertyInfo> &E : prop_info) {
@@ -1683,7 +1683,10 @@ void FileSystemDock::_update_project_settings_after_move(const HashMap<String, S
 		}
 	}
 
-	// Update folder colors.
+	ProjectSettings::get_singleton()->save();
+}
+
+void FileSystemDock::_update_folder_colors_after_move(const HashMap<String, String> &p_folders_renames) {
 	for (const KeyValue<String, String> &rename : p_folders_renames) {
 		if (assigned_folder_colors.has(rename.key)) {
 			assigned_folder_colors[rename.value] = assigned_folder_colors[rename.key];
@@ -1873,9 +1876,10 @@ void FileSystemDock::_rename_operation_confirm() {
 	_try_move_item(to_rename, new_path, file_renames, folder_renames);
 
 	int current_tab = EditorSceneTabs::get_singleton()->get_current_tab();
-	_update_resource_paths_after_move(file_renames, uids);
-	_update_dependencies_after_move(file_renames, file_owners);
-	_update_project_settings_after_move(file_renames, folder_renames);
+	// _update_resource_paths_after_move(file_renames, uids);
+	// _update_dependencies_after_move(file_renames, file_owners);
+	// _update_project_settings_after_move(file_renames);
+	_update_folder_colors_after_move(folder_renames);
 	_update_favorites_after_move(file_renames, folder_renames);
 
 	EditorSceneTabs::get_singleton()->set_current_tab(current_tab);
@@ -1886,7 +1890,7 @@ void FileSystemDock::_rename_operation_confirm() {
 	}
 
 	print_verbose("FileSystem: calling rescan.");
-	_rescan();
+	_rescan(old_path.get_base_dir(), !to_rename.is_file);
 }
 
 void FileSystemDock::_duplicate_operation_confirm(const String &p_path) {
@@ -2030,6 +2034,7 @@ void FileSystemDock::_move_operation_confirm(const String &p_to_path, bool p_cop
 			if (to_move[i].path != new_paths[i]) {
 				_try_move_item(to_move[i], new_paths[i], file_renames, folder_renames);
 				is_moved = true;
+				EditorFileSystem::get_singleton()->pending_scan_fs_changes(to_move[i].is_file ? to_move[i].path.get_base_dir() : to_move[i].path.left(-1).get_base_dir(), !to_move[i].is_file);
 			}
 		}
 
@@ -2047,15 +2052,16 @@ void FileSystemDock::_move_operation_confirm(const String &p_to_path, bool p_cop
 			EditorFileSystem::get_singleton()->update_files(files_to_update);
 
 			int current_tab = EditorSceneTabs::get_singleton()->get_current_tab();
-			_update_resource_paths_after_move(file_renames, uids);
-			_update_dependencies_after_move(file_renames, file_owners);
-			_update_project_settings_after_move(file_renames, folder_renames);
+			// _update_resource_paths_after_move(file_renames, uids);
+			// _update_dependencies_after_move(file_renames, file_owners);
+			// _update_project_settings_after_move(file_renames);
+			_update_folder_colors_after_move(folder_renames);
 			_update_favorites_after_move(file_renames, folder_renames);
 
 			EditorSceneTabs::get_singleton()->set_current_tab(current_tab);
 
 			print_verbose("FileSystem: calling rescan.");
-			_rescan();
+			_rescan(p_to_path, true);
 
 			current_path = p_to_path;
 			current_path_line_edit->set_text(current_path);
@@ -2842,7 +2848,7 @@ bool FileSystemDock::_matches_all_search_tokens(const String &p_text) {
 	return true;
 }
 
-void FileSystemDock::_rescan() {
+void FileSystemDock::_rescan(const String &p_dir, bool p_recursive) {
 	if (tree->has_focus()) {
 		had_focus = tree;
 	} else if (files->has_focus()) {
@@ -2850,7 +2856,7 @@ void FileSystemDock::_rescan() {
 	}
 
 	_set_scanning_mode();
-	EditorFileSystem::get_singleton()->scan();
+	EditorFileSystem::get_singleton()->pending_scan_fs_changes(p_dir, p_recursive);
 }
 
 void FileSystemDock::_change_split_mode() {
