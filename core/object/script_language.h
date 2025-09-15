@@ -100,7 +100,7 @@ public:
 	static bool is_global_class_tool(const String &p_class);
 	static void get_global_class_list(List<StringName> *r_global_classes);
 	static void get_inheriters_list(const StringName &p_base_type, List<StringName> *r_classes);
-	static void save_global_classes();
+	static void save_global_classes(const HashMap<StringName, String> &p_script_class_icon_paths = {});
 
 	static Vector<Ref<ScriptBacktrace>> capture_script_backtraces(bool p_include_variables = false);
 

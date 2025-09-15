@@ -518,16 +518,17 @@ void ScriptServer::get_global_class_list(List<StringName> *r_global_classes) {
 	}
 }
 
-void ScriptServer::save_global_classes() {
-	Dictionary class_icons;
-
-	Array script_classes = ProjectSettings::get_singleton()->get_global_class_list();
-	for (const Variant &script_class : script_classes) {
-		Dictionary d = script_class;
-		if (!d.has("name") || !d.has("icon")) {
-			continue;
+void ScriptServer::save_global_classes(const HashMap<StringName, String> &p_script_class_icon_paths) {
+	HashMap<StringName, String> class_icons = p_script_class_icon_paths;
+	if (class_icons.is_empty()) {
+		Array script_classes = ProjectSettings::get_singleton()->get_global_class_list();
+		for (const Variant &script_class : script_classes) {
+			Dictionary d = script_class;
+			if (!d.has("name") || !d.has("icon")) {
+				continue;
+			}
+			class_icons[d["name"]] = d["icon"];
 		}
-		class_icons[d["name"]] = d["icon"];
 	}
 
 	List<StringName> gc;
@@ -535,12 +536,13 @@ void ScriptServer::save_global_classes() {
 	Array gcarr;
 	for (const StringName &E : gc) {
 		const GlobalScriptClass &global_class = global_classes[E];
+		String *icon = class_icons.getptr(E);
 		Dictionary d;
 		d["class"] = E;
 		d["language"] = global_class.language;
 		d["path"] = global_class.path;
 		d["base"] = global_class.base;
-		d["icon"] = class_icons.get(E, "");
+		d["icon"] = icon ? *icon : String();
 		d["is_abstract"] = global_class.is_abstract;
 		d["is_tool"] = global_class.is_tool;
 		gcarr.push_back(d);

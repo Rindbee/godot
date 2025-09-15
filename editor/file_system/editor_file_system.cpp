@@ -2374,7 +2374,7 @@ void EditorFileSystem::_update_script_classes() {
 	if (update_script_paths.is_empty()) {
 		// Ensure the global class file is always present; it's essential for exports to work.
 		if (!FileAccess::exists(ProjectSettings::get_singleton()->get_global_class_list_path())) {
-			ScriptServer::save_global_classes();
+			EditorNode::get_editor_data().script_class_save_global_classes();
 		}
 		return;
 	}
