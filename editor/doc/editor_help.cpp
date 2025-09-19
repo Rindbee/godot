@@ -3002,6 +3002,14 @@ void EditorHelp::remove_doc(const String &p_class_name) {
 	}
 }
 
+Error EditorHelp::remove_doc_check_script_path(const String &p_class_name, const String &p_path) {
+	if (!_script_docs_loaded.is_set()) {
+		_docs_to_remove_check_path.push_back(ScriptClass{ p_class_name, p_path });
+		return ERR_UNCONFIGURED;
+	}
+	return get_doc_data()->remove_doc_check_script_path(p_class_name, p_path) ? OK : ERR_DOES_NOT_EXIST;
+}
+
 void EditorHelp::remove_script_doc_by_path(const String &p_path) {
 	if (!_script_docs_loaded.is_set()) {
 		_docs_to_remove_by_path.push_back(p_path);
@@ -3129,6 +3137,9 @@ void EditorHelp::_process_postponed_docs() {
 	for (const String &class_name : _docs_to_remove) {
 		doc->remove_doc(class_name);
 	}
+	for (const ScriptClass &E : _docs_to_remove_check_path) {
+		doc->remove_doc_check_script_path(E.class_name, E.script_path);
+	}
 	for (const String &path : _docs_to_remove_by_path) {
 		doc->remove_script_doc_by_path(path);
 	}
@@ -3137,6 +3148,7 @@ void EditorHelp::_process_postponed_docs() {
 	}
 	_docs_to_add.clear();
 	_docs_to_remove.clear();
+	_docs_to_remove_check_path.clear();
 	_docs_to_remove_by_path.clear();
 }
 
@@ -3204,6 +3216,7 @@ void EditorHelp::_regen_script_doc_thread(void *p_udata) {
 	// Ignore changes from filesystem scan since script docs will be now.
 	_docs_to_add.clear();
 	_docs_to_remove.clear();
+	_docs_to_remove_check_path.clear();
 	_docs_to_remove_by_path.clear();
 
 	_reload_scripts_documentation(dir);

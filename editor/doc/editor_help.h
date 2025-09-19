@@ -194,9 +194,15 @@ class EditorHelp : public VBoxContainer {
 	inline static Thread worker_thread;
 	inline static Thread loader_thread; // Only load scripts here to avoid deadlocking with main thread.
 
+	struct ScriptClass {
+		String class_name;
+		String script_path;
+	};
+
 	inline static SafeFlag _script_docs_loaded = SafeFlag(false);
 	inline static LocalVector<DocData::ClassDoc> _docs_to_add;
 	inline static LocalVector<String> _docs_to_remove;
+	inline static LocalVector<ScriptClass> _docs_to_remove_check_path;
 	inline static LocalVector<String> _docs_to_remove_by_path;
 
 	static void _wait_for_thread(Thread &p_thread = worker_thread);
@@ -243,6 +249,7 @@ public:
 	static DocData::ClassDoc *get_doc(const String &p_class_name);
 	static void add_doc(const DocData::ClassDoc &p_class_doc);
 	static void remove_doc(const String &p_class_name);
+	static Error remove_doc_check_script_path(const String &p_class_name, const String &p_path);
 	static void remove_script_doc_by_path(const String &p_path);
 	static bool has_doc(const String &p_class_name);
 

@@ -932,29 +932,16 @@ bool EditorFileSystem::_update_scan_actions() {
 			case ItemAction::ACTION_FILE_REMOVE: {
 				int idx = ia.dir->find_file_index(ia.file);
 				ERR_CONTINUE(idx == -1);
-
-				const String file_path = ia.dir->get_file_path(idx);
-				const String class_name = ia.dir->files[idx]->class_info.name;
-				if (ClassDB::is_parent_class(ia.dir->files[idx]->type, SNAME("Script"))) {
-					_queue_update_script_class(file_path, ScriptClassInfoUpdate());
-				}
-				if (ia.dir->files[idx]->type == SNAME("PackedScene")) {
-					_queue_update_scene_groups(file_path);
-				}
-
-				_delete_internal_files(file_path);
-				memdelete(ia.dir->files[idx]);
-				ia.dir->files.remove_at(idx);
-
+				bool is_global_class_cleared = false;
+				_file_removed(ia.dir, idx, is_global_class_cleared);
 				// Restore another script with the same global class name if it exists.
-				if (!class_name.is_empty()) {
+				if (is_global_class_cleared) {
 					EditorFileSystemDirectory::FileInfo *old_fi = nullptr;
-					String old_file = _get_file_by_class_name(filesystem, class_name, old_fi);
+					String old_file = _get_file_by_class_name(filesystem, ia.dir->files[idx]->class_info.name, old_fi);
 					if (!old_file.is_empty() && old_fi) {
 						_queue_update_script_class(old_file, ScriptClassInfoUpdate::from_file_info(old_fi));
 					}
 				}
-
 				fs_changed = true;
 
 			} break;
@@ -2084,6 +2071,40 @@ EditorFileSystem::ScriptClassInfo EditorFileSystem::_get_global_script_class(con
 	return info;
 }
 
+void EditorFileSystem::_global_cache_clear_by_file_removed(EditorFileSystemDirectory *p_dir, int p_idx, bool &r_is_global_class_cleared) {
+	EditorFileSystemDirectory::FileInfo *fi = p_dir->files[p_idx];
+	const String path = p_dir->get_file_path(p_idx);
+	// UID cache.
+	if (fi->uid != ResourceUID::INVALID_ID) {
+		// TODO: Ensure that the file path corresponding to the uid is unique.
+		// ResourceUID::get_singleton()->remove_id(fi->uid);
+		ResourceUID::get_singleton()->remove_id_check_path(fi->uid, path);
+	}
+	if (ClassDB::is_parent_class(fi->type, Script::get_class_static())) { // Global class cache.
+		// The existence of classes with the same name is allowed, but only one will be effective,
+		// so check whether the path is consistent with the effective global class's path.
+		if (!fi->class_info.name.is_empty()) {
+			r_is_global_class_cleared |= ScriptServer::remove_global_class_check_path(fi->class_info.name, path);
+			r_is_global_class_cleared |= (OK == EditorHelp::remove_doc_check_script_path(fi->class_info.name, path));
+		}
+		// Owner resource file icons.
+		if (!fi->class_info.icon_path.is_empty()) {
+			// All resource files that depend on this script should have their icons cleaned up.
+			// TODO: Make the file scope more precise or postpone scanning for all files.
+			_update_files_icon_path();
+		}
+	} else if (fi->type == PackedScene::get_class_static()) { // Scene groups cache.
+		ProjectSettings::get_singleton()->remove_scene_groups_cache(path);
+	}
+}
+
+void EditorFileSystem::_file_removed(EditorFileSystemDirectory *p_dir, int p_idx, bool &r_is_global_class_cleared) {
+	_delete_internal_files(p_dir->get_file_path(p_idx));
+	_global_cache_clear_by_file_removed(p_dir, p_idx, r_is_global_class_cleared);
+	memdelete(p_dir->files[p_idx]);
+	p_dir->files.remove_at(p_idx);
+}
+
 void EditorFileSystem::_update_file_icon_path(EditorFileSystemDirectory::FileInfo *file_info) {
 	String icon_path;
 	if (file_info->resource_script_class != StringName()) {
@@ -2375,6 +2396,7 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 	bool updated = false;
 	bool update_files_icon_cache = false;
 	Vector<EditorFileSystemDirectory::FileInfo *> files_to_update_icon_path;
+	Vector<String> classes_need_restore;
 	for (const String &file : p_script_paths) {
 		ERR_CONTINUE(file.is_empty());
 		EditorFileSystemDirectory *fs = nullptr;
@@ -2387,40 +2409,25 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 		}
 
 		if (!FileAccess::exists(file)) {
-			//was removed
-			_delete_internal_files(file);
+			// Was removed.
 			if (cpos != -1) { // Might've never been part of the editor file system (*.* files deleted in Open dialog).
-				if (fs->files[cpos]->uid != ResourceUID::INVALID_ID) {
-					if (ResourceUID::get_singleton()->has_id(fs->files[cpos]->uid)) {
-						ResourceUID::get_singleton()->remove_id(fs->files[cpos]->uid);
-					}
+				bool is_global_class_cleared = false;
+				_file_removed(fs, cpos, is_global_class_cleared);
+				if (is_global_class_cleared) {
+					classes_need_restore.push_back(fs->files[cpos]->class_info.name);
 				}
-				if (ClassDB::is_parent_class(fs->files[cpos]->type, SNAME("Script"))) {
-					ScriptClassInfoUpdate update;
-					update.type = fs->files[cpos]->type;
-					_queue_update_script_class(file, update);
-					if (!fs->files[cpos]->class_info.icon_path.is_empty()) {
-						update_files_icon_cache = true;
-					}
-				}
-				if (fs->files[cpos]->type == SNAME("PackedScene")) {
-					_queue_update_scene_groups(file);
-				}
-
-				memdelete(fs->files[cpos]);
-				fs->files.remove_at(cpos);
 				updated = true;
 			}
 		} else {
 			String type = ResourceLoader::get_resource_type(file);
-			if (type.is_empty() && textfile_extensions.has(file.get_extension())) {
-				type = "TextFile";
-			}
-			if (type.is_empty() && other_file_extensions.has(file.get_extension())) {
-				type = "OtherFile";
+			if (type.is_empty()) {
+				if (other_file_extensions.has(file.get_extension())) {
+					type = "OtherFile";
+				} else if (textfile_extensions.has(file.get_extension())) {
+					type = "TextFile";
+				}
 			}
 			String script_class = ResourceLoader::get_resource_script_class(file);
-
 			ResourceUID::ID uid = ResourceLoader::get_resource_uid(file);
 
 			if (cpos == -1) {
@@ -2438,7 +2445,7 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 				EditorFileSystemDirectory::FileInfo *fi = memnew(EditorFileSystemDirectory::FileInfo);
 				fi->file = file_name;
 				fi->import_modified_time = 0;
-				fi->import_valid = (type == "TextFile" || type == "OtherFile") ? true : ResourceLoader::is_import_valid(file);
+				fi->import_valid = (type == "TextFile" || type == "OtherFile") || ResourceLoader::is_import_valid(file);
 				fi->import_md5 = "";
 				fi->import_dest_paths = Vector<String>();
 
@@ -2449,6 +2456,13 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 				}
 				cpos = idx;
 			} else {
+				if (fs->files[cpos]->uid != ResourceUID::INVALID_ID && fs->files[cpos]->uid != uid) {
+					bool is_global_class_cleared = false;
+					_global_cache_clear_by_file_removed(fs, cpos, is_global_class_cleared);
+					if (is_global_class_cleared) {
+						classes_need_restore.push_back(fs->files[cpos]->class_info.name);
+					}
+				}
 				//the file exists and it was updated, and was not added in this step.
 				//this means we must force upon next restart to scan it again, to get proper type and dependencies
 				late_update_files.insert(file);
@@ -2516,6 +2530,15 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 	}
 
 	if (updated) {
+		// Restore another script with the same global class name if it exists.
+		for (String &E : classes_need_restore) {
+			EditorFileSystemDirectory::FileInfo *old_fi = nullptr;
+			String old_file = _get_file_by_class_name(filesystem, E, old_fi);
+			if (!old_file.is_empty() && old_fi) {
+				_queue_update_script_class(old_file, ScriptClassInfoUpdate::from_file_info(old_fi));
+			}
+		}
+
 		if (update_files_icon_cache) {
 			_update_files_icon_path();
 		} else {

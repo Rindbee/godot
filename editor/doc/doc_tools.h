@@ -44,6 +44,7 @@ public:
 	void merge_from(const DocTools &p_data);
 	void add_doc(const DocData::ClassDoc &p_class_doc);
 	void remove_doc(const String &p_class_name);
+	bool remove_doc_check_script_path(const String &p_class_name, const String &p_path);
 	void remove_script_doc_by_path(const String &p_path);
 	bool has_doc(const String &p_class_name);
 	enum GenerateFlags {

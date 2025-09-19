@@ -434,6 +434,15 @@ void ScriptServer::remove_global_class(const StringName &p_class) {
 	inheriters_cache_dirty = true;
 }
 
+bool ScriptServer::remove_global_class_check_path(const StringName &p_class, const String &p_path) {
+	if (!global_classes.has(p_class) || global_classes[p_class].path != p_path) {
+		return false;
+	}
+	global_classes.erase(p_class);
+	inheriters_cache_dirty = true;
+	return true;
+}
+
 void ScriptServer::get_inheriters_list(const StringName &p_base_type, List<StringName> *r_classes) {
 	if (inheriters_cache_dirty) {
 		inheriters_cache.clear();

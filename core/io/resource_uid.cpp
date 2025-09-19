@@ -207,6 +207,16 @@ void ResourceUID::remove_id(ID p_id) {
 	unique_ids.erase(p_id);
 }
 
+bool ResourceUID::remove_id_check_path(ID p_id, const String &p_path) {
+	MutexLock l(mutex);
+	ERR_FAIL_COND_V(!unique_ids.has(p_id), false);
+	if (String::utf8(unique_ids[p_id].cs.ptr()) != p_path) {
+		return false;
+	}
+	unique_ids.erase(p_id);
+	return true;
+}
+
 String ResourceUID::uid_to_path(const String &p_uid) {
 	return singleton->get_id_path(singleton->text_to_id(p_uid));
 }

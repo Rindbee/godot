@@ -367,6 +367,9 @@ class EditorFileSystem : public Node {
 
 	Vector<Ref<EditorFileSystemImportFormatSupportQuery>> import_support_queries;
 
+	void _global_cache_clear_by_file_removed(EditorFileSystemDirectory *p_dir, int p_idx, bool &r_is_global_class_cleared);
+	void _file_removed(EditorFileSystemDirectory *p_dir, int p_idx, bool &r_is_global_class_cleared);
+
 	void _update_file_icon_path(EditorFileSystemDirectory::FileInfo *file_info);
 	void _update_files_icon_path(EditorFileSystemDirectory *edp = nullptr);
 	bool _remove_invalid_global_class_names(const HashSet<String> &p_existing_class_names);
