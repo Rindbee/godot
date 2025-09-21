@@ -130,6 +130,9 @@ ResourceUID::ID ResourceUID::create_id() {
 		id &= 0x7FFFFFFFFFFFFFFF;
 		bool exists = unique_ids.has(id);
 		if (!exists) {
+#ifdef TOOLS_ENABLED
+			history.push_back(HistoryEntry{ OS::get_singleton()->get_ticks_usec(), id, "", CREATE });
+#endif
 			return id;
 		}
 	}
@@ -152,6 +155,9 @@ ResourceUID::ID ResourceUID::create_id_for_path(const String &p_path) {
 			break;
 		}
 	}
+#ifdef TOOLS_ENABLED
+	history.push_back(HistoryEntry{ OS::get_singleton()->get_ticks_usec(), id, p_path, CREATE });
+#endif
 	return id;
 }
 
@@ -165,6 +171,9 @@ void ResourceUID::add_id(ID p_id, const String &p_path) {
 	ERR_FAIL_COND(unique_ids.has(p_id));
 	Cache c;
 	c.cs = p_path.utf8();
+#ifdef TOOLS_ENABLED
+	history.push_back(HistoryEntry{ OS::get_singleton()->get_ticks_usec(), p_id, p_path, ADD });
+#endif
 	unique_ids[p_id] = c;
 	changed = true;
 }
@@ -179,6 +188,14 @@ void ResourceUID::set_id(ID p_id, const String &p_path) {
 		return; // Both are empty strings.
 	}
 	if ((update_ptr == nullptr) != (cached_ptr == nullptr) || strcmp(update_ptr, cached_ptr) != 0) {
+#ifdef TOOLS_ENABLED
+		if (cached_ptr != nullptr) {
+			history.push_back(HistoryEntry{ OS::get_singleton()->get_ticks_usec(), p_id, String::utf8(cached_ptr), REMOVE });
+		}
+		if (cached_ptr != nullptr) {
+			history.push_back(HistoryEntry{ OS::get_singleton()->get_ticks_usec(), p_id, String::utf8(update_ptr), ADD });
+		}
+#endif
 		unique_ids[p_id].cs = cs;
 		unique_ids[p_id].saved_to_cache = false; //changed
 		changed = true;
@@ -210,6 +227,9 @@ String ResourceUID::get_id_path(ID p_id) const {
 void ResourceUID::remove_id(ID p_id) {
 	MutexLock l(mutex);
 	ERR_FAIL_COND(!unique_ids.has(p_id));
+#ifdef TOOLS_ENABLED
+	history.push_back(HistoryEntry{ OS::get_singleton()->get_ticks_usec(), p_id, String::utf8(unique_ids[p_id].cs.ptr()), REMOVE });
+#endif
 	unique_ids.erase(p_id);
 }
 
@@ -293,6 +313,9 @@ Error ResourceUID::load_from_cache(bool p_reset) {
 		ERR_FAIL_COND_V(rl != len, ERR_FILE_CORRUPT);
 
 		c.saved_to_cache = true;
+#ifdef TOOLS_ENABLED
+		history.push_back(HistoryEntry{ OS::get_singleton()->get_ticks_usec(), id, String::utf8(c.cs.ptr()), LOAD });
+#endif
 		unique_ids[id] = c;
 
 		TOOLS_PRINT_VERBOSE(vformat("Loading uid:\"%s\" path:\"%s\".", id_to_text(id), String::utf8(c.cs.ptr())));
@@ -302,6 +325,9 @@ Error ResourceUID::load_from_cache(bool p_reset) {
 
 	cache_entries = entry_count;
 	changed = false;
+#ifdef TOOLS_ENABLED
+	parse_actions_from_history();
+#endif
 	return OK;
 }
 
@@ -367,6 +393,45 @@ String ResourceUID::get_path_from_cache(Ref<FileAccess> &p_cache_file, const Str
 	return String();
 }
 
+#ifdef TOOLS_ENABLED
+void ResourceUID::parse_actions_from_history() {
+	last_history_idx = history_idx;
+	last_action_idx = action_idx;
+	HashMap<ID, int> id_map;
+	for (int i = history_idx; i < history.size(); i++) {
+		const HistoryEntry &E = history[i];
+		if (E.type == LOAD || E.type == CREATE || E.type == REMOVE) {
+			ActionEntry ae;
+			ae.first = E;
+			id_map[E.uid] = actions.size();
+			actions.push_back(ae);
+		} else if (E.type == ADD) {
+			actions.write[id_map[E.uid]].second = E;
+		}
+	}
+	history_idx = history.size();
+	action_idx = actions.size();
+	print_recent_actions();
+}
+
+void ResourceUID::print_recent_actions() {
+	for (int i = last_action_idx; i < actions.size(); i++) {
+		const ActionEntry &E = actions[i];
+		if (E.first.type == LOAD) {
+			print_verbose(vformat("[%.6f] %s %s <==", E.first.time / 1000000.0f, id_to_text(E.first.uid), E.first.path));
+		} else if (E.first.type == CREATE && E.second.type == ADD) {
+			print_verbose(vformat("[%.6f] %s %s <--", E.first.time / 1000000.0f, id_to_text(E.first.uid), E.second.path));
+		} else if (E.first.type == REMOVE) {
+			if (E.second.type == NONE) {
+				print_verbose(vformat("[%.6f] %s %s ==>", E.first.time / 1000000.0f, id_to_text(E.first.uid), E.first.path));
+			} else if (E.second.type == ADD) {
+				print_verbose(vformat("[%.6f] %s %s ==> %s", E.first.time / 1000000.0f, id_to_text(E.first.uid), E.first.path, E.second.path));
+			}
+		}
+	}
+}
+#endif // TOOLS_ENABLED
+
 void ResourceUID::verify() {
 	MutexLock l(mutex);
 
@@ -382,6 +447,9 @@ void ResourceUID::verify() {
 
 	if (!invalid_ids.is_empty()) {
 		for (ID &id : invalid_ids) {
+#ifdef TOOLS_ENABLED
+			history.push_back(HistoryEntry{ OS::get_singleton()->get_ticks_usec(), id, String::utf8(unique_ids[id].cs.ptr()), REMOVE });
+#endif
 			unique_ids.erase(id);
 		}
 		changed = true;
