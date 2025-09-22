@@ -2702,7 +2702,7 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 			if (fi->type != type) {
 				fi->type = type;
 				overwrites.push_back(file);
-			} else if (!_can_import_file(file)) {
+			} else if (!_validate_file_extension(file, import_extensions)) {
 				reloads.push_back(file);
 			}
 			fi->resource_script_class = script_class;
