@@ -1038,7 +1038,7 @@ bool EditorFileSystem::_update_scan_actions() {
 				const String new_file_path = ia.dir->get_file_path(idx);
 				const ResourceUID::ID existing_id = ResourceLoader::get_resource_uid(new_file_path);
 				if (existing_id != ResourceUID::INVALID_ID) {
-					const String old_path = ResourceUID::get_singleton()->get_id_path(existing_id);
+					const String old_path = ResourceUID::get_singleton()->has_id(existing_id) ? ResourceUID::get_singleton()->get_id_path(existing_id) : "";
 					if (old_path != new_file_path && FileAccess::exists(old_path)) {
 						const ResourceUID::ID new_id = ResourceUID::get_singleton()->create_id_for_path(new_file_path);
 						ResourceUID::get_singleton()->add_id(new_id, new_file_path);
@@ -1688,6 +1688,9 @@ void EditorFileSystem::pending_scan_fs_changes(const String &p_dir, bool p_recur
 }
 
 void EditorFileSystem::_delete_internal_files(const String &p_file) {
+	if (FileAccess::exists(p_file)) {
+		return; // It is just ignored because it is not supported, so there is no need to delete its internal files.
+	}
 	if (FileAccess::exists(p_file + ".import")) {
 		List<String> paths;
 		ResourceFormatImporter::get_singleton()->get_internal_resource_path_list(p_file, &paths);
