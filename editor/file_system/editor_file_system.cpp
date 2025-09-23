@@ -297,6 +297,45 @@ void EditorFileSystem::_scan_for_uid_directory(const ScannedDirectory *p_scan_di
 	}
 }
 
+void EditorFileSystem::_update_global_script_class_activation() {
+	for (KeyValue<StringName, ScriptClassAlternatives> &E : global_script_class_alternatives) {
+		ScriptClassAlternatives &scas = E.value;
+		if (!first_scan && scas.active) {
+			continue;
+		}
+		if (!scas.active) {
+			if (scas.active_uid != ResourceUID::INVALID_ID) {
+				for (KeyValue<String, EditorFileSystemDirectory::FileInfo *> &F : scas.alternatives) {
+					if (F.value->uid == scas.active_uid) { // Think of it as a file move.
+						scas.active_path = F.key;
+						scas.active = true;
+						break;
+					}
+				}
+			}
+			if (!scas.active) {
+				scas.active = true;
+				if (scas.alternatives.has(scas.active_path)) { // Maybe the internal files have changed.
+					scas.active_uid = scas.alternatives[scas.active_path]->uid;
+				} else { // Seems to have been removed.
+					scas.active_path = scas.alternatives.begin()->key;
+					scas.active_uid = scas.alternatives.begin()->value->uid;
+				}
+			}
+		}
+		const EditorFileSystemDirectory::FileInfo *fi = scas.alternatives[scas.active_path];
+		ERR_CONTINUE(fi == nullptr);
+		ScriptServer::add_global_class(fi->class_info.name, fi->class_info.extends, fi->class_info.lang, scas.active_path, fi->class_info.is_abstract, fi->class_info.is_tool, fi->uid);
+		EditorNode::get_editor_data().script_class_set_icon_path(fi->class_info.name, fi->class_info.icon_path);
+		EditorNode::get_editor_data().script_class_set_name(scas.active_path, fi->class_info.name);
+
+		{
+			MutexLock update_script_lock(update_script_mutex);
+			update_script_paths_documentation.insert(scas.active_path);
+		}
+	}
+}
+
 void EditorFileSystem::_first_scan_filesystem() {
 	EditorProgress ep = EditorProgress("first_scan_filesystem", TTR("Project initialization"), 5);
 	HashSet<String> existing_class_names;
@@ -317,6 +356,7 @@ void EditorFileSystem::_first_scan_filesystem() {
 	// At the same time, to prevent looping multiple times in all files, it looks for extensions.
 	ep.step(TTR("Loading global class names..."), 1, true);
 	_first_scan_process_scripts(first_scan_root_dir, gdextension_extensions, existing_class_names, extensions);
+	_update_global_script_class_activation();
 
 	// Removing invalid global class to prevent having invalid paths in ScriptServer.
 	bool save_scripts = _remove_invalid_global_class_names(existing_class_names);
@@ -372,16 +412,32 @@ void EditorFileSystem::_first_scan_process_scripts(const ScannedDirectory *p_sca
 
 			if (is_script && ClassDB::is_parent_class(type, Script::get_class_static())) {
 				const ScriptClassInfo &info = _get_global_script_class(type, path);
-				ScriptClassInfoUpdate update(info);
-				update.type = type;
-				_register_global_class_script(path, path, update);
 
-				if (!info.name.is_empty() && !info.lang.is_empty()) {
-					p_existing_class_names.insert(info.name);
+				EditorFileSystemDirectory::FileInfo *fi = memnew(EditorFileSystemDirectory::FileInfo);
+				fi->file = scan_file;
+				fi->type = type;
+				fi->class_info = info;
+				fi->uid = ResourceLoader::get_resource_uid(path);
+				script_file_info[path] = fi;
+
+				if (info.name.is_empty() || info.lang.is_empty()) {
+					continue;
 				}
-			}
+				p_existing_class_names.insert(info.name);
 
-			if (is_gdextension && type == GDExtension::get_class_static()) {
+				ScriptClassAlternatives &scas = global_script_class_alternatives[info.name];
+				scas.alternatives[path] = fi;
+
+				if (ScriptServer::is_global_class(info.name)) {
+					if (scas.active_path.is_empty()) { // Query only once.
+						scas.active_path = ScriptServer::get_global_class_path(info.name);
+						scas.active_uid = ScriptServer::get_global_class_uid(info.name);
+					}
+					if (!scas.active && scas.active_uid == fi->uid && scas.active_path == path) {
+						scas.active = true; // A perfect match.
+					}
+				}
+			} else if (is_gdextension && type == GDExtension::get_class_static()) {
 				p_extensions.insert(path);
 			}
 		}
@@ -624,10 +680,12 @@ void EditorFileSystem::_scan_filesystem() {
 	if (first_scan) {
 		memdelete(first_scan_root_dir);
 		first_scan_root_dir = nullptr;
+
 		memdelete(processed_files);
 	} else {
 		//on the first scan this is done from the main thread after re-importing
 		_save_filesystem_cache();
+		_update_global_script_class_activation();
 	}
 }
 
@@ -1718,6 +1776,7 @@ void EditorFileSystem::scan_fs_changes(ScanProgress &p_progress) {
 		}
 		_scan_fs_changes(efsd, p_progress, efsd->recursive);
 	}
+	_update_global_script_class_activation();
 }
 
 void EditorFileSystem::_pending_scan_fs_changes(EditorFileSystemDirectory *p_dir, bool p_recursive) {
