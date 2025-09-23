@@ -153,6 +153,22 @@ class EditorFileSystem : public Node {
 
 	_THREAD_SAFE_CLASS_
 
+	enum FileStatus {
+		META_NONE = 0,
+		META_UPDATE = 1,
+		META_ADD = 1 << 1,
+		META_TYPE_ADD = META_ADD,
+		META_TYPE_REMOVE = 1 << 2,
+		META_REMOVE = 1 << 3,
+
+		FILE_UPDATE = META_UPDATE, // UID not change, type not change.
+		FILE_ADD = META_UPDATE | META_ADD, // UID new add.
+		FILE_TYPE_CHANGE = META_TYPE_REMOVE | META_TYPE_ADD | META_UPDATE, // UID not change, type change.
+		FILE_REMOVE = META_REMOVE | META_TYPE_REMOVE, // UID new remove.
+
+		FILE_OVERWRITE = FILE_REMOVE | FILE_ADD, // UID change.
+	};
+
 	struct ItemAction {
 		enum Action {
 			ACTION_NONE,
