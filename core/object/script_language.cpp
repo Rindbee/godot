@@ -413,10 +413,10 @@ void ScriptServer::add_global_class(const StringName &p_class, const StringName 
 			existing->uid = p_uid;
 			existing->path = p_path;
 			existing->language = p_language;
-			existing->is_abstract = p_is_abstract;
-			existing->is_tool = p_is_tool;
 			inheriters_cache_dirty = true;
 		}
+		existing->is_abstract = p_is_abstract;
+		existing->is_tool = p_is_tool;
 	} else {
 		// Add new class.
 		GlobalScriptClass g;

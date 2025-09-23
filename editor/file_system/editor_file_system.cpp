@@ -335,6 +335,17 @@ void EditorFileSystem::_first_scan_filesystem() {
 	ep.step(TTR("Loading global class names..."), 1, true);
 	_first_scan_process_scripts(first_scan_root_dir, gdextension_extensions, existing_class_names, extensions);
 
+	for (KeyValue<StringName, ScriptClassAlternatives> E : global_script_class_alternatives) {
+		ScriptClassAlternatives &scas = E.value;
+		if (scas.active_idx == -1) {
+			scas.active_idx = scas.alternatives.size() - 1; // For compatibility.
+		}
+		const ScriptClassAlternative &sca = scas.alternatives[scas.active_idx];
+		ScriptServer::add_global_class(sca.update_info.name, sca.update_info.extends, sca.update_info.lang, sca.path, sca.update_info.is_abstract, sca.update_info.is_tool, sca.uid);
+		EditorNode::get_editor_data().script_class_set_icon_path(sca.update_info.name, sca.update_info.icon_path);
+		EditorNode::get_editor_data().script_class_set_name(sca.path, sca.update_info.name);
+	}
+
 	// Removing invalid global class to prevent having invalid paths in ScriptServer.
 	bool save_scripts = _remove_invalid_global_class_names(existing_class_names);
 
@@ -389,16 +400,37 @@ void EditorFileSystem::_first_scan_process_scripts(const ScannedDirectory *p_sca
 
 			if (is_script && ClassDB::is_parent_class(type, Script::get_class_static())) {
 				const ScriptClassInfo &info = _get_global_script_class(type, path);
+
+				if (info.name.is_empty() || info.lang.is_empty()) {
+					continue;
+				}
+
 				ScriptClassInfoUpdate update(info);
 				update.type = type;
-				_register_global_class_script(path, path, update);
 
-				if (!info.name.is_empty() && !info.lang.is_empty()) {
-					p_existing_class_names.insert(info.name);
+				ScriptClassAlternative sca;
+				sca.uid = ResourceLoader::get_resource_uid(path);
+				sca.path = path;
+				bool active = ScriptServer::is_global_class(info.name);
+				if (active) {
+					ResourceUID::ID active_uid = ScriptServer::get_global_class_uid(info.name);
+					if (active_uid != ResourceUID::INVALID_ID) {
+						active = active_uid == sca.uid;
+					} else {
+						active = ScriptServer::get_global_class_path(info.name) == path;
+					}
 				}
-			}
+				ScriptClassAlternatives &scas = global_script_class_alternatives[info.name];
+				if (active) {
+					if (scas.active_idx != -1) {
+						WARN_PRINT(vformat("Multiple activations for %s, %s %s, %s %s", info.name, scas.alternatives[scas.active_idx].uid, scas.alternatives[scas.active_idx].path, sca.uid, sca.path));
+					}
+					scas.active_idx = scas.alternatives.size();
+				}
+				scas.alternatives.push_back(sca);
 
-			if (is_gdextension && type == GDExtension::get_class_static()) {
+				p_existing_class_names.insert(info.name);
+			} else if (is_gdextension && type == GDExtension::get_class_static()) {
 				p_extensions.insert(path);
 			}
 		}

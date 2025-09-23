@@ -330,6 +330,19 @@ class EditorFileSystem : public Node {
 		}
 	};
 
+	struct ScriptClassAlternative {
+		ResourceUID::ID uid = ResourceUID::INVALID_ID;
+		String path; // For compatibility, path can be deleted when uid is fully reliable.
+		ScriptClassInfoUpdate update_info;
+	};
+
+	struct ScriptClassAlternatives {
+		int active_idx = -1;
+		Vector<ScriptClassAlternative> alternatives;
+	};
+
+	HashMap<StringName, ScriptClassAlternatives> global_script_class_alternatives;
+
 	Mutex update_script_mutex;
 	HashMap<String, ScriptClassInfoUpdate> update_script_paths;
 	HashSet<String> update_script_paths_documentation;
