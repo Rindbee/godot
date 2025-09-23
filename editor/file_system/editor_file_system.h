@@ -219,7 +219,6 @@ class EditorFileSystem : public Node {
 	static EditorFileSystem *singleton;
 
 	using ScriptClassInfo = EditorFileSystemDirectory::FileInfo::ScriptClassInfo;
-
 	/* Used for reading the filesystem cache file */
 	struct FileCache {
 		StringName type;
@@ -324,6 +323,15 @@ class EditorFileSystem : public Node {
 			return update;
 		}
 	};
+
+	HashMap<String, EditorFileSystemDirectory::FileInfo *> script_file_info;
+	struct ScriptClassAlternatives {
+		bool active = false;
+		String active_path;
+		ResourceUID::ID active_uid = ResourceUID::INVALID_ID;
+		HashMap<String, EditorFileSystemDirectory::FileInfo *> alternatives;
+	};
+	HashMap<StringName, ScriptClassAlternatives> global_script_class_alternatives;
 
 	Mutex update_script_mutex;
 	HashMap<String, ScriptClassInfoUpdate> update_script_paths;
