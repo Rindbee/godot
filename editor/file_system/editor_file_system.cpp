@@ -2549,8 +2549,10 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 			const String old_script_class_icon_path = fi->class_info.icon_path;
 			const String old_class_name = fi->class_info.name;
 			if (fi->type != type) {
+				if (!fi->type.is_empty()) { // Not a recent addition.
+					overwrites.push_back(file);
+				}
 				fi->type = type;
-				overwrites.push_back(file);
 			} else if (!_validate_file_extension(file, import_extensions)) {
 				reloads.push_back(file);
 			}
