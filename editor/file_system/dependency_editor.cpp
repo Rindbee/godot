@@ -624,7 +624,7 @@ void DependencyRemoveDialog::ok_pressed() {
 			} else {
 				emit_signal(SNAME("folder_removed"), dirs_to_delete[i]);
 			}
-			EditorFileSystem::get_singleton()->pending_scan_fs_changes(dirs_to_delete[i].get_base_dir(), false);
+			EditorFileSystem::get_singleton()->pending_scan_fs_changes(dirs_to_delete[i].left(-1).get_base_dir(), false);
 		}
 	}
 
