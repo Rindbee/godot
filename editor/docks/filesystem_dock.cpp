@@ -1995,7 +1995,7 @@ void FileSystemDock::_move_operation_confirm(const String &p_to_path, bool p_cop
 			if (to_move[i].path != new_paths[i]) {
 				_try_move_item(to_move[i], new_paths[i], file_renames, folder_renames);
 				is_moved = true;
-				EditorFileSystem::get_singleton()->pending_scan_fs_changes(to_move[i].path.get_base_dir(), !to_move[i].is_file);
+				EditorFileSystem::get_singleton()->pending_scan_fs_changes(to_move[i].is_file ? to_move[i].path.get_base_dir() : to_move[i].path.left(-1).get_base_dir(), !to_move[i].is_file);
 			}
 		}
 
