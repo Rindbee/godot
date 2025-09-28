@@ -60,7 +60,7 @@ class EditorFileSystemDirectory : public Object {
 		StringName resource_script_class; // If any resource has script with a global class name, its found here.
 		ResourceUID::ID uid = ResourceUID::INVALID_ID;
 		uint64_t modified_time = 0;
-		uint64_t import_modified_time = 0;
+		uint64_t internal_modified_time = 0;
 		String import_md5;
 		Vector<String> import_dest_paths;
 		bool import_valid = true;
