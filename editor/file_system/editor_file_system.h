@@ -47,7 +47,7 @@ class EditorFileSystemDirectory : public Object {
 
 	String name;
 	uint64_t modified_time;
-	bool verified = false; // Used for checking changes.
+	bool verified = true; // Used for checking changes.
 	bool dirty = true; // The files in the current directory need to be checked.
 	bool recursive = true; // Recursive checking is required.
 
@@ -55,6 +55,7 @@ class EditorFileSystemDirectory : public Object {
 	Vector<EditorFileSystemDirectory *> subdirs;
 
 	struct FileInfo {
+		EditorFileSystemDirectory *parent = nullptr;
 		String file;
 		StringName type;
 		StringName resource_script_class; // If any resource has script with a global class name, its found here.
@@ -66,7 +67,7 @@ class EditorFileSystemDirectory : public Object {
 		bool import_valid = true;
 		String import_group_file;
 		Vector<String> deps;
-		bool verified = false; // Used for checking changes.
+		bool verified = true; // Used for checking changes.
 		// This is for script resources only.
 		struct ScriptClassInfo {
 			String name;
@@ -77,6 +78,34 @@ class EditorFileSystemDirectory : public Object {
 			bool is_tool = false;
 		};
 		ScriptClassInfo class_info;
+		enum FileStatus {
+			NONE = 0,
+
+			FILE_ADD = 1,
+			FILE_REMOVE = 1 << 1,
+			FILE_UPDATE = 1 << 2,
+
+			UID_UPDATE = 1 << 4,
+			UID_ADD = 1 << 5,
+			UID_REMOVE = 1 << 6,
+			UID_OVERWRITE = UID_ADD | UID_REMOVE,
+
+			TYPE_UPDATE = 1 << 8,
+			TYPE_ADD = 1 << 9,
+			TYPE_REMOVE = 1 << 10,
+			TYPE_OVERWRITE = TYPE_ADD | TYPE_REMOVE,
+
+			HAS_CUSTOM_UID_SUPPORT = 1 << 12,
+			HAS_NO_CUSTOM_UID_SUPPORT = 1 << 13,
+
+			AS_RESOURCE = 1 << 16,
+			IS_IMPORTABLE = 1 << 17,
+			IS_SCRIPT = 1 << 18,
+			IS_PACKEDSCENE = 1 << 19,
+		};
+		uint32_t status = AS_RESOURCE | FILE_ADD;
+
+		String get_path() const;
 	};
 
 	Vector<FileInfo *> files;
@@ -159,20 +188,28 @@ class EditorFileSystem : public Node {
 			ACTION_DIR_REMOVE,
 			ACTION_FILE_ADD,
 			ACTION_FILE_REMOVE,
+			ACTION_FILE_UPDATE,
 			ACTION_FILE_TEST_REIMPORT,
-			ACTION_FILE_RELOAD
+			ACTION_FILE_RELOAD,
+			ACTION_UID_ADD,
+			ACTION_UID_REMOVE,
+			ACTION_UID_PENDING_ADD,
+			ACTION_TYPE_ADD,
+			ACTION_TYPE_REMOVE,
+			ACTION_TYPE_PENDING_ADD,
 		};
 
 		Action action = ACTION_NONE;
+		ResourceUID::ID old_uid = ResourceUID::INVALID_ID; // Only used for UID actions. Can be used as a fallback value or a delete value.
+		String path; // In order to reduce the count of path calculations.
 		EditorFileSystemDirectory *dir = nullptr;
-		String file;
-		EditorFileSystemDirectory *new_dir = nullptr;
-		EditorFileSystemDirectory::FileInfo *new_file = nullptr;
+		EditorFileSystemDirectory::FileInfo *file = nullptr; // Make sure it is up to date.
 	};
 
 	struct ScannedDirectory {
 		String name;
 		String full_path;
+		int count = 0;
 		Vector<ScannedDirectory *> subdirs;
 		List<String> files;
 
@@ -200,6 +237,16 @@ class EditorFileSystem : public Node {
 
 	bool _load_filesystem_from_cache();
 	bool _mark_dirty_dirs_from_cache();
+
+	void _script_class_info_add(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path);
+	void _script_class_info_remove(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path);
+	void _script_class_info_update(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path);
+
+	EditorFileSystemDirectory::FileInfo *_file_info_add(EditorFileSystemDirectory *p_parent_dir, const String &p_parent_path, const String &p_file, bool p_insert);
+	void _file_info_remove(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path, const int p_idx);
+	void _file_info_update(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path);
+
+	int _dir_info_remove(EditorFileSystemDirectory *p_dir, const String &p_path, const int p_idx);
 
 	void _notify_filesystem_changed();
 	void _scan_filesystem();
@@ -263,7 +310,6 @@ class EditorFileSystem : public Node {
 	void _scan_dirs_changes(bool p_full_scan = true);
 
 	void _delete_internal_files(const String &p_file);
-	int _insert_actions_delete_files_directory(EditorFileSystemDirectory *p_dir);
 
 	HashSet<String> textfile_extensions;
 	HashSet<String> other_file_extensions;
@@ -282,6 +328,15 @@ class EditorFileSystem : public Node {
 
 	List<String> sources_changed;
 	List<ItemAction> scan_actions;
+
+	List<ItemAction>::Element *uid_add_end;
+	List<ItemAction>::Element *uid_remove_end;
+	List<ItemAction>::Element *uid_pending_add_end;
+	List<ItemAction>::Element *uid_analyze_end;
+	List<ItemAction>::Element *fi_remove_point;
+
+	void _reset_points();
+	void _create_actions_from_uid_change(EditorFileSystemDirectory::FileInfo *p_fi, const String &p_path, const ResourceUID::ID p_uid = ResourceUID::INVALID_ID);
 
 	bool _update_scan_actions();
 
