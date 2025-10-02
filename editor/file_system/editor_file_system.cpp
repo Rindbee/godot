@@ -1103,6 +1103,10 @@ bool EditorFileSystem::_update_scan_actions() {
 				}
 			} break;
 			case ItemAction::ACTION_UID_ADD: {
+				print_line(vformat("[Add] old uid: %s, uid: %s, path: %s.",
+						ResourceUID::get_singleton()->id_to_text(ia.old_uid),
+						ResourceUID::get_singleton()->id_to_text(ia.file->uid),
+						ia.path));
 				if (ia.old_uid == ResourceUID::INVALID_ID || ResourceUID::get_singleton()->has_id(ia.old_uid)) {
 					ia.file->uid = ResourceUID::get_singleton()->create_id_for_path(ia.path);
 				} else {
@@ -1141,11 +1145,19 @@ bool EditorFileSystem::_update_scan_actions() {
 				}
 			} break;
 			case ItemAction::ACTION_UID_REMOVE: {
+				print_line(vformat("[Remove] old uid: %s, uid: %s, path: %s.",
+						ResourceUID::get_singleton()->id_to_text(ia.old_uid),
+						ResourceUID::get_singleton()->id_to_text(ia.file->uid),
+						ia.path));
 				if (!first_scan || ResourceUID::get_singleton()->has_id(ia.old_uid)) {
 					ResourceUID::get_singleton()->remove_id(ia.old_uid);
 				}
 			} break;
 			case ItemAction::ACTION_UID_PENDING_ADD: {
+				print_line(vformat("[Pending add] old uid: %s, uid: %s, path: %s.",
+						ResourceUID::get_singleton()->id_to_text(ia.old_uid),
+						ResourceUID::get_singleton()->id_to_text(ia.file->uid),
+						ia.path));
 				if (ResourceUID::get_singleton()->has_id(ia.file->uid)) {
 					const String cache_uid_path = ResourceUID::get_singleton()->get_id_path(ia.file->uid);
 					if (cache_uid_path != ia.path) {
