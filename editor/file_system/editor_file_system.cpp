@@ -1103,6 +1103,11 @@ bool EditorFileSystem::_update_scan_actions() {
 				}
 			} break;
 			case ItemAction::ACTION_UID_ADD: {
+				print_verbose(vformat("[%.6f] [ADD UID] old uid: %s, uid: %s, path: %s.",
+						OS::get_singleton()->get_ticks_usec() / 1000000.0f,
+						ResourceUID::get_singleton()->id_to_text(ia.old_uid),
+						ResourceUID::get_singleton()->id_to_text(ia.file->uid),
+						ia.path));
 				if (ia.old_uid == ResourceUID::INVALID_ID || ResourceUID::get_singleton()->has_id(ia.old_uid)) {
 					ia.file->uid = ResourceUID::get_singleton()->create_id_for_path(ia.path);
 				} else {
@@ -1136,16 +1141,28 @@ bool EditorFileSystem::_update_scan_actions() {
 						step_count--;
 					}
 				}
+				fs_changed = true; // The timestamp has changed.
+				print_verbose(vformat("[ADD UID] %s, %s", ia.path, ResourceUID::get_singleton()->id_to_text(ia.file->uid)));
 				// Update class cache.
 				if (ia.file->status & EditorFileSystemDirectory::FileInfo::IS_SCRIPT) {
 				}
 			} break;
 			case ItemAction::ACTION_UID_REMOVE: {
+				print_verbose(vformat("[%.6f] [REMOVE UID] old uid: %s, uid: %s, path: %s.",
+						OS::get_singleton()->get_ticks_usec() / 1000000.0f,
+						ResourceUID::get_singleton()->id_to_text(ia.old_uid),
+						ResourceUID::get_singleton()->id_to_text(ia.file->uid),
+						ia.path));
 				if (!first_scan || ResourceUID::get_singleton()->has_id(ia.old_uid)) {
 					ResourceUID::get_singleton()->remove_id(ia.old_uid);
 				}
 			} break;
 			case ItemAction::ACTION_UID_PENDING_ADD: {
+				print_verbose(vformat("[%.6f] [TEST ADD UID] old uid: %s, uid: %s, path: %s.",
+						OS::get_singleton()->get_ticks_usec() / 1000000.0f,
+						ResourceUID::get_singleton()->id_to_text(ia.old_uid),
+						ResourceUID::get_singleton()->id_to_text(ia.file->uid),
+						ia.path));
 				if (ResourceUID::get_singleton()->has_id(ia.file->uid)) {
 					const String cache_uid_path = ResourceUID::get_singleton()->get_id_path(ia.file->uid);
 					if (cache_uid_path != ia.path) {
