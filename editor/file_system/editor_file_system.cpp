@@ -533,7 +533,17 @@ bool EditorFileSystem::_load_filesystem_from_cache() {
 		if (ResourceLoader::has_custom_uid_support(path)) {
 			fi->status |= EditorFileSystemDirectory::FileInfo::HAS_CUSTOM_UID_SUPPORT;
 		} else {
-			fi->status |= EditorFileSystemDirectory::FileInfo::HAS_NO_CUSTOM_UID_SUPPORT;
+			fi->status &= ~EditorFileSystemDirectory::FileInfo::HAS_CUSTOM_UID_SUPPORT;
+		}
+
+		if (_validate_file_extension(fi->file, import_extensions)) {
+			fi->status |= EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE;
+		}
+		if (_validate_file_extension(fi->file, other_file_extensions)) {
+			fi->status |= EditorFileSystemDirectory::FileInfo::IS_OTHER;
+		}
+		if (_validate_file_extension(fi->file, textfile_extensions)) {
+			fi->status |= EditorFileSystemDirectory::FileInfo::IS_TEXT;
 		}
 
 		if (is_reused) {
@@ -543,8 +553,7 @@ bool EditorFileSystem::_load_filesystem_from_cache() {
 			fi->type = split[1].get_slicec('/', 0);
 			fi->uid = split[2].to_int();
 
-			if (_validate_file_extension(fi->file, import_extensions)) {
-				fi->status |= EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE;
+			if (fi->status & EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE) {
 				// If it can be imported, and it was added, it needs to be reimported.
 				ItemAction ia;
 				ia.action = ItemAction::ACTION_FILE_TEST_REIMPORT;
@@ -1049,18 +1058,29 @@ bool EditorFileSystem::_update_scan_actions() {
 			} break;
 			case ItemAction::ACTION_FILE_ADD: {
 				ERR_CONTINUE(!ia.file);
-				ia.file->status &= ~0xFFFF;
+				ia.file->status &= ~EditorFileSystemDirectory::FileInfo::TEMPORARY;
 				fs_changed = true;
 			} break;
 			case ItemAction::ACTION_FILE_REMOVE: {
 				ERR_CONTINUE(!ia.file);
-				// ia.file->status &= ~0xFFFF;
+				// ia.file->status &= ~EditorFileSystemDirectory::FileInfo::TEMPORARY;
 				memdelete(ia.file);
 				fs_changed = true;
 			} break;
 			case ItemAction::ACTION_FILE_UPDATE: {
 				ERR_CONTINUE(!ia.file);
-				ia.file->status &= ~0xFFFF;
+
+				if (ia.file->status & EditorFileSystemDirectory::FileInfo::TIMESTAMP_MODIFIED) {
+					if (ia.file->status & EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE) {
+						ia.file->internal_modified_time = FileAccess::get_modified_time(ia.path + ".import");
+					} else if (ia.file->status & EditorFileSystemDirectory::FileInfo::HAS_CUSTOM_UID_SUPPORT) {
+						ia.file->modified_time = FileAccess::get_access_time(ia.path);
+					} else {
+						ia.file->internal_modified_time = FileAccess::get_modified_time(ia.path + ".uid");
+					}
+				}
+
+				ia.file->status &= ~EditorFileSystemDirectory::FileInfo::TEMPORARY;
 				fs_changed = true;
 			} break;
 			case ItemAction::ACTION_FILE_TEST_REIMPORT: {
@@ -1115,23 +1135,14 @@ bool EditorFileSystem::_update_scan_actions() {
 				}
 				ResourceUID::get_singleton()->add_id(ia.file->uid, ia.path);
 				// Update internal file.
-				if (ia.file->status & EditorFileSystemDirectory::FileInfo::HAS_CUSTOM_UID_SUPPORT) {
-					ResourceSaver::set_uid(ia.path, ia.file->uid);
-					ia.file->modified_time = FileAccess::get_modified_time(ia.path);
-				} else if (ia.file->status & EditorFileSystemDirectory::FileInfo::HAS_NO_CUSTOM_UID_SUPPORT) {
-					Ref<FileAccess> f = FileAccess::open(ia.path + ".uid", FileAccess::WRITE);
-					if (f.is_valid()) {
-						f->store_line(ResourceUID::get_singleton()->id_to_text(ia.file->uid));
-					}
-					ia.file->internal_modified_time = FileAccess::get_modified_time(ia.path + ".uid");
-				} else if (ia.file->status & EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE) {
+				if (ia.file->status & EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE) {
 					Ref<ConfigFile> cfg;
 					cfg.instantiate();
 					Error err = cfg->load(ia.path + ".import");
 					if (err == OK) {
 						cfg->set_value("remap", "uid", ResourceUID::get_singleton()->id_to_text(ia.file->uid));
 						err = cfg->save(ia.path + ".import");
-						ia.file->internal_modified_time = FileAccess::get_modified_time(ia.path + ".import");
+						ia.file->status |= EditorFileSystemDirectory::FileInfo::TIMESTAMP_MODIFIED;
 					} else {
 						ItemAction another;
 						another.action = ItemAction::ACTION_FILE_TEST_REIMPORT;
@@ -1140,6 +1151,15 @@ bool EditorFileSystem::_update_scan_actions() {
 						scan_actions.push_back(another);
 						step_count--;
 					}
+				} else if (ia.file->status & EditorFileSystemDirectory::FileInfo::HAS_CUSTOM_UID_SUPPORT) {
+					ResourceSaver::set_uid(ia.path, ia.file->uid);
+					ia.file->modified_time = FileAccess::get_modified_time(ia.path);
+				} else {
+					Ref<FileAccess> f = FileAccess::open(ia.path + ".uid", FileAccess::WRITE);
+					if (f.is_valid()) {
+						f->store_line(ResourceUID::get_singleton()->id_to_text(ia.file->uid));
+					}
+					ia.file->status |= EditorFileSystemDirectory::FileInfo::TIMESTAMP_MODIFIED;
 				}
 				fs_changed = true; // The timestamp has changed.
 				print_verbose(vformat("[ADD UID] %s, %s", ia.path, ResourceUID::get_singleton()->id_to_text(ia.file->uid)));
@@ -1503,13 +1523,22 @@ EditorFileSystemDirectory::FileInfo *EditorFileSystem::_file_info_add(EditorFile
 	if (ResourceLoader::has_custom_uid_support(path)) {
 		fi->status |= EditorFileSystemDirectory::FileInfo::HAS_CUSTOM_UID_SUPPORT;
 	} else {
-		fi->status |= EditorFileSystemDirectory::FileInfo::HAS_NO_CUSTOM_UID_SUPPORT;
+		fi->status &= ~EditorFileSystemDirectory::FileInfo::HAS_CUSTOM_UID_SUPPORT;
+	}
+
+	if (_validate_file_extension(fi->file, import_extensions)) {
+		fi->status |= EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE;
+	}
+	if (_validate_file_extension(fi->file, other_file_extensions)) {
+		fi->status |= EditorFileSystemDirectory::FileInfo::IS_OTHER;
+	}
+	if (_validate_file_extension(fi->file, textfile_extensions)) {
+		fi->status |= EditorFileSystemDirectory::FileInfo::IS_TEXT;
 	}
 
 	if (!is_reused) {
 		fi->file = p_file;
-		if (_validate_file_extension(fi->file, import_extensions)) {
-			fi->status |= EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE;
+		if (fi->status & EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE) {
 			// If it can be imported, and it was added, it needs to be reimported.
 			if (!FileAccess::exists(path + ".import")) {
 				_create_actions_from_uid_change(fi, path, fi->uid);
@@ -1531,9 +1560,9 @@ EditorFileSystemDirectory::FileInfo *EditorFileSystem::_file_info_add(EditorFile
 		const ScriptClassInfo &sci = _get_global_script_class(fi->type, path);
 
 		if (fi->type.is_empty()) {
-			if (_validate_file_extension(p_file, other_file_extensions)) {
+			if (fi->status & EditorFileSystemDirectory::FileInfo::IS_OTHER) {
 				fi->type = "OtherFile";
-			} else if (_validate_file_extension(p_file, textfile_extensions)) {
+			} else if (fi->status & EditorFileSystemDirectory::FileInfo::IS_TEXT) {
 				fi->type = "TextFile";
 			}
 			fi->status &= ~EditorFileSystemDirectory::FileInfo::AS_RESOURCE;
@@ -1555,7 +1584,7 @@ EditorFileSystemDirectory::FileInfo *EditorFileSystem::_file_info_add(EditorFile
 		fi->deps = _get_dependencies(path);
 		fi->resource_script_class = ResourceLoader::get_resource_script_class(path);
 		fi->import_group_file = ResourceLoader::get_import_group_file(path);
-		fi->internal_modified_time = 0;
+		fi->internal_modified_time = (fi->status & EditorFileSystemDirectory::FileInfo::HAS_CUSTOM_UID_SUPPORT) ? 0 : FileAccess::get_modified_time(path + ".uid");
 	}
 
 	fi->modified_time = FileAccess::get_modified_time(path);
@@ -1592,22 +1621,59 @@ void EditorFileSystem::_file_info_remove(EditorFileSystemDirectory::FileInfo *p_
 void EditorFileSystem::_file_info_update(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path) {
 	p_file->status |= EditorFileSystemDirectory::FileInfo::FILE_UPDATE;
 
-	if (ResourceLoader::has_custom_uid_support(p_path)) {
-		p_file->status |= EditorFileSystemDirectory::FileInfo::HAS_CUSTOM_UID_SUPPORT;
-	} else {
-		p_file->status |= EditorFileSystemDirectory::FileInfo::HAS_NO_CUSTOM_UID_SUPPORT;
+	if (scanning_settings_changed) {
+		if (ResourceLoader::has_custom_uid_support(p_path)) {
+			p_file->status |= EditorFileSystemDirectory::FileInfo::HAS_CUSTOM_UID_SUPPORT;
+		} else {
+			p_file->status &= ~EditorFileSystemDirectory::FileInfo::HAS_CUSTOM_UID_SUPPORT;
+		}
+
+		p_file->status &= ~EditorFileSystemDirectory::FileInfo::CATEGORY_CHANGED; // Clear the category bits.
+
+		if (_validate_file_extension(p_file->file, import_extensions)) {
+			p_file->status |= EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE;
+		}
+		if (_validate_file_extension(p_file->file, other_file_extensions)) {
+			p_file->status |= EditorFileSystemDirectory::FileInfo::IS_OTHER;
+		}
+		if (_validate_file_extension(p_file->file, textfile_extensions)) {
+			p_file->status |= EditorFileSystemDirectory::FileInfo::IS_TEXT;
+		}
+
+		const StringName old_type = p_file->type;
+		p_file->type = ResourceLoader::get_resource_type(p_path);
+		if (p_file->type.is_empty()) {
+			if (p_file->status & EditorFileSystemDirectory::FileInfo::IS_OTHER) {
+				p_file->type = "OtherFile";
+			} else if (p_file->status & EditorFileSystemDirectory::FileInfo::IS_TEXT) {
+				p_file->type = "TextFile";
+			}
+			p_file->status &= ~EditorFileSystemDirectory::FileInfo::AS_RESOURCE;
+		} else {
+			p_file->status |= EditorFileSystemDirectory::FileInfo::AS_RESOURCE;
+		}
+
+		if (old_type != p_file->type) {
+			if (!old_type.is_empty()) {
+				p_file->status |= EditorFileSystemDirectory::FileInfo::TYPE_REMOVE;
+			}
+			if (!p_file->type.is_empty()) {
+				p_file->status |= EditorFileSystemDirectory::FileInfo::TYPE_ADD;
+			}
+		} else if (!old_type.is_empty()) {
+			p_file->status |= EditorFileSystemDirectory::FileInfo::TYPE_UPDATE;
+		}
 	}
 
-	if (_validate_file_extension(p_file->file, import_extensions)) {
+	const uint64_t mt = FileAccess::get_modified_time(p_path);
+
+	if (p_file->status & EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE) {
 		// Check here if file must be imported or not.
 		// Same logic as in _process_file_system, the last modifications dates
 		// needs to be trusted to prevent reading all the .import files and the md5
 		// each time the user switch back to Godot.
-		const uint64_t mt = FileAccess::get_modified_time(p_path);
 		const uint64_t import_mt = FileAccess::get_modified_time(p_path + ".import");
 		if (_is_test_for_reimport_needed(p_path, p_file->modified_time, mt, p_file->internal_modified_time, import_mt, p_file->import_dest_paths)) {
-			// p_file->status &= 0xFF00FFFF; // Clear the category bits.
-			// p_file->status |= EditorFileSystemDirectory::FileInfo::AS_RESOURCE | EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE;
 			ItemAction ia;
 			ia.action = ItemAction::ACTION_FILE_TEST_REIMPORT;
 			ia.path = p_path;
@@ -1617,16 +1683,26 @@ void EditorFileSystem::_file_info_update(EditorFileSystemDirectory::FileInfo *p_
 		return;
 	}
 
-	const uint64_t mt = FileAccess::get_modified_time(p_path);
-	const uint64_t internal_mt = (p_file->status & EditorFileSystemDirectory::FileInfo::HAS_CUSTOM_UID_SUPPORT) ? 0 : FileAccess::get_modified_time(p_path + ".uid");
-
 	if (mt == p_file->modified_time) {
+		if (!(p_file->status & EditorFileSystemDirectory::FileInfo::AS_RESOURCE)) {
+			return; // No uid, no internal files.
+		}
+
+		const uint64_t internal_mt = (p_file->status & EditorFileSystemDirectory::FileInfo::HAS_CUSTOM_UID_SUPPORT)
+				? 0
+				: FileAccess::get_modified_time(p_path + ".uid");
+
 		// The type does not change, only the UID may change.
 		if ((p_file->status & EditorFileSystemDirectory::FileInfo::HAS_CUSTOM_UID_SUPPORT) ||
 				(internal_mt == p_file->internal_modified_time && internal_mt != 0)) {
 			// The UID is not changed, but prevents invalidation of the UID cache on editor startup.
 			if (first_scan && !(p_file->status & EditorFileSystemDirectory::FileInfo::IS_SCRIPT)) {
 				_create_actions_from_uid_change(p_file, p_path, p_file->uid);
+				ItemAction ia;
+				ia.action = ItemAction::ACTION_FILE_UPDATE;
+				ia.path = p_path;
+				ia.file = p_file;
+				scan_actions.push_back(ia);
 			}
 			return;
 		}
@@ -1635,36 +1711,49 @@ void EditorFileSystem::_file_info_update(EditorFileSystemDirectory::FileInfo *p_
 			ResourceUID::ID old_uid = p_file->uid;
 			p_file->uid = internal_mt == 0 ? ResourceUID::INVALID_ID : ResourceLoader::get_resource_uid(p_path);
 			_create_actions_from_uid_change(p_file, p_path, old_uid);
+
+			ItemAction ia;
+			ia.action = ItemAction::ACTION_FILE_UPDATE;
+			ia.path = p_path;
+			ia.file = p_file;
+			scan_actions.push_back(ia);
 		}
 		return;
 	}
 	p_file->modified_time = mt;
-	p_file->internal_modified_time = internal_mt;
 
-	p_file->status &= 0xFF00FFFF; // Clear the category bits.
-
-	p_file->type = ResourceLoader::get_resource_type(p_path);
-	if (p_file->type.is_empty()) {
-		if (_validate_file_extension(p_file->file, other_file_extensions)) {
-			p_file->type = "OtherFile";
-		} else if (_validate_file_extension(p_file->file, textfile_extensions)) {
-			p_file->type = "TextFile";
-		}
-	} else {
-		p_file->status |= EditorFileSystemDirectory::FileInfo::AS_RESOURCE;
-		if (p_file->type == PackedScene::get_class_static()) {
-			p_file->status |= EditorFileSystemDirectory::FileInfo::IS_PACKEDSCENE;
-			_queue_update_scene_groups(p_path);
-		} else if (ClassDB::is_parent_class(p_file->type, Script::get_class_static())) {
-			p_file->status |= EditorFileSystemDirectory::FileInfo::IS_SCRIPT;
+	if (!scanning_settings_changed) {
+		p_file->type = ResourceLoader::get_resource_type(p_path);
+		if (p_file->type.is_empty()) {
+			if (p_file->status & EditorFileSystemDirectory::FileInfo::IS_OTHER) {
+				p_file->type = "OtherFile";
+			} else if (p_file->status & EditorFileSystemDirectory::FileInfo::IS_TEXT) {
+				p_file->type = "TextFile";
+			}
+			p_file->status &= ~EditorFileSystemDirectory::FileInfo::AS_RESOURCE;
+		} else {
+			p_file->status |= EditorFileSystemDirectory::FileInfo::AS_RESOURCE;
 		}
 	}
 
-	const ResourceUID::ID old_uid = p_file->uid;
-	if ((p_file->status & EditorFileSystemDirectory::FileInfo::AS_RESOURCE) && (!first_scan || !(p_file->status & EditorFileSystemDirectory::FileInfo::IS_SCRIPT))) {
-		p_file->uid = ResourceLoader::get_resource_uid(p_path);
+	p_file->internal_modified_time = !(p_file->status & EditorFileSystemDirectory::FileInfo::AS_RESOURCE) || (p_file->status & EditorFileSystemDirectory::FileInfo::HAS_CUSTOM_UID_SUPPORT)
+			? 0
+			: FileAccess::get_modified_time(p_path + ".uid");
+
+	if (p_file->type == PackedScene::get_class_static()) {
+		p_file->status |= EditorFileSystemDirectory::FileInfo::IS_PACKEDSCENE;
+		_queue_update_scene_groups(p_path);
+	} else if (ClassDB::is_parent_class(p_file->type, Script::get_class_static())) {
+		p_file->status |= EditorFileSystemDirectory::FileInfo::IS_SCRIPT;
 	}
-	_create_actions_from_uid_change(p_file, p_path, old_uid);
+
+	if (!first_scan || !(p_file->status & EditorFileSystemDirectory::FileInfo::IS_SCRIPT)) {
+		const ResourceUID::ID old_uid = p_file->uid;
+		if ((p_file->status & EditorFileSystemDirectory::FileInfo::AS_RESOURCE)) {
+			p_file->uid = ResourceLoader::get_resource_uid(p_path);
+		}
+		_create_actions_from_uid_change(p_file, p_path, old_uid);
+	}
 
 	p_file->resource_script_class = ResourceLoader::get_resource_script_class(p_path);
 
@@ -2991,9 +3080,9 @@ Error EditorFileSystem::_reimport_group(const String &p_group_file, const Vector
 		fi->uid = uid;
 		fi->type = importer->get_resource_type();
 		if (fi->type.is_empty()) {
-			if (_validate_file_extension(file, other_file_extensions)) {
+			if (fi->status & EditorFileSystemDirectory::FileInfo::IS_OTHER) {
 				fi->type = "OtherFile";
-			} else if (_validate_file_extension(file, textfile_extensions)) {
+			} else if (fi->status & EditorFileSystemDirectory::FileInfo::IS_TEXT) {
 				fi->type = "TextFile";
 			}
 			fi->status &= ~EditorFileSystemDirectory::FileInfo::AS_RESOURCE;
