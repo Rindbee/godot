@@ -246,6 +246,8 @@ class EditorFileSystem : public Node {
 
 	bool _load_filesystem_from_cache();
 
+	void _category_validate(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path);
+	void _type_analysis(EditorFileSystemDirectory::FileInfo *p_file, const StringName &p_new_type);
 	void _script_class_info_update(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path, const EditorFileSystemDirectory::FileInfo::ScriptClassInfo *p_sci);
 
 	EditorFileSystemDirectory::FileInfo *_file_info_add(EditorFileSystemDirectory *p_parent_dir, const String &p_parent_path, const String &p_file, bool p_insert);
