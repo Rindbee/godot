@@ -80,30 +80,40 @@ class EditorFileSystemDirectory : public Object {
 		ScriptClassInfo class_info;
 		enum FileStatus {
 			NONE = 0,
-
 			FILE_ADD = 1,
 			FILE_REMOVE = 1 << 1,
 			FILE_UPDATE = 1 << 2,
-			UID_UPDATE = 1 << 3,
-			UID_ADD = 1 << 4,
-			UID_REMOVE = 1 << 5,
+			FILE_CHANGED = FILE_ADD | FILE_REMOVE | FILE_UPDATE,
+			UID_ADD = 1 << 3,
+			UID_REMOVE = 1 << 4,
+			UID_UPDATE = 1 << 5,
 			UID_OVERWRITE = UID_ADD | UID_REMOVE,
-			TYPE_UPDATE = 1 << 6,
-			TYPE_ADD = 1 << 7,
-			TYPE_REMOVE = 1 << 8,
+			UID_CHANGED = UID_ADD | UID_REMOVE | UID_UPDATE,
+			TYPE_ADD = 1 << 6,
+			TYPE_REMOVE = 1 << 7,
+			TYPE_UPDATE = 1 << 8,
 			TYPE_OVERWRITE = TYPE_ADD | TYPE_REMOVE,
-			ICON_UPDATE = 1 << 9,
-			ICON_ADD = 1 << 10,
-			ICON_REMOVE = 1 << 11,
+			TYPE_CHANGED = TYPE_ADD | TYPE_REMOVE | TYPE_UPDATE,
+			ICON_ADD = 1 << 9,
+			ICON_REMOVE = 1 << 10,
+			ICON_UPDATE = 1 << 11,
 			ICON_OVERWRITE = ICON_ADD | ICON_REMOVE,
+			ICON_CHANGED = ICON_ADD | ICON_REMOVE | ICON_UPDATE,
+			TIMESTAMP_MODIFIED = 1 << 12, // The file was modified during scan, so the timestamp needs to be updated.
 
-			HAS_CUSTOM_UID_SUPPORT = 1 << 14,
-			HAS_NO_CUSTOM_UID_SUPPORT = 1 << 15,
+			TEMPORARY = FILE_CHANGED | UID_CHANGED | TYPE_CHANGED | ICON_CHANGED | TIMESTAMP_MODIFIED,
 
-			AS_RESOURCE = 1 << 16,
-			IS_IMPORTABLE = 1 << 17,
-			IS_SCRIPT = 1 << 18,
-			IS_PACKEDSCENE = 1 << 19,
+			HAS_CUSTOM_UID_SUPPORT = 1 << 16,
+
+			IS_SCRIPT = 1 << 17,
+			IS_PACKEDSCENE = 1 << 18,
+			SPECIAL_TYPE = IS_SCRIPT | IS_PACKEDSCENE,
+
+			AS_RESOURCE = 1 << 28,
+			IS_IMPORTABLE = 1 << 29,
+			IS_OTHER = 1 << 30,
+			IS_TEXT = 1 << 31,
+			CATEGORY_CHANGED = IS_IMPORTABLE | IS_OTHER | IS_TEXT,
 		};
 		uint32_t status = AS_RESOURCE | FILE_ADD;
 
