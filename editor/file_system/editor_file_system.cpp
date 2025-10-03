@@ -1384,73 +1384,84 @@ int EditorFileSystem::_scan_new_dir(ScannedDirectory *p_dir, Ref<DirAccess> &da)
 	return nb_files_total_scan;
 }
 
-void EditorFileSystem::_script_class_info_add(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path) {
-	if (p_file->class_info.name.is_empty() || p_file->class_info.lang.is_empty()) {
+void EditorFileSystem::_script_class_info_update(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path, const EditorFileSystemDirectory::FileInfo::ScriptClassInfo *p_sci) {
+	EditorFileSystemDirectory::FileInfo::ScriptClassInfo &sci = p_file->class_info;
+
+	// Clear old class info.
+	if (!sci.name.is_empty() && !sci.lang.is_empty() && (!p_sci || sci.name != p_sci->name || p_sci->lang.is_empty())) {
+		HashMap<StringName, ScriptClassAlternatives>::Iterator E = global_script_class_alternatives.find(sci.name);
+		if (E) {
+			ScriptClassAlternatives &scas = E->value;
+			scas.alternatives.erase(p_path);
+
+			if (scas.active && scas.active_uid == p_file->uid && scas.active_path == p_path) {
+				ScriptServer::remove_global_class(sci.name);
+				EditorHelp::remove_doc(sci.name);
+
+				if (scas.alternatives.is_empty()) {
+					global_script_class_alternatives.erase(sci.name);
+					EditorNode::get_editor_data().script_class_clear_icon_path(sci.name);
+					EditorNode::get_editor_data().script_class_clear_name(p_path);
+
+					if (!sci.icon_path.is_empty()) {
+						p_file->status |= EditorFileSystemDirectory::FileInfo::ICON_REMOVE;
+					}
+				} else {
+					scas.active_path = scas.alternatives.begin()->key;
+					scas.active_uid = scas.alternatives.begin()->value->uid;
+
+					EditorFileSystemDirectory::FileInfo *fi = scas.alternatives[scas.active_path];
+
+					ScriptServer::add_global_class(fi->class_info.name, fi->class_info.extends, fi->class_info.lang, scas.active_path, fi->class_info.is_abstract, fi->class_info.is_tool, fi->uid);
+					EditorNode::get_editor_data().script_class_set_icon_path(fi->class_info.name, fi->class_info.icon_path);
+					EditorNode::get_editor_data().script_class_set_name(scas.active_path, fi->class_info.name);
+
+					if (!fi->class_info.icon_path.is_empty()) {
+						fi->status |= EditorFileSystemDirectory::FileInfo::ICON_UPDATE;
+					}
+				}
+			}
+		} else {
+			ERR_PRINT(vformat("The file %s of the untracked global class %s was detected and removed.", p_path, sci.name));
+		}
+	}
+
+	if (!p_sci) {
 		return;
 	}
-	HashMap<StringName, ScriptClassAlternatives>::Iterator E = global_script_class_alternatives.find(p_file->class_info.name);
+
+	if (p_sci->name.is_empty() || p_sci->lang.is_empty()) {
+		sci = *p_sci;
+		return; // No need to add class info.
+	}
+
+	bool updat_cache = true;
+	HashMap<StringName, ScriptClassAlternatives>::Iterator E = global_script_class_alternatives.find(p_sci->name);
 	if (E) {
-		E->value.alternatives[p_path] = p_file;
+		if (p_sci->icon_path != sci.icon_path) {
+			p_file->status |= EditorFileSystemDirectory::FileInfo::ICON_UPDATE;
+		}
+		sci = *p_sci;
+		// Check whether the activated alternative info needs to be updated.
+		updat_cache = E->value.active_uid == p_file->uid && E->value.active_path == p_path;
 	} else {
-		ScriptClassAlternatives &scas = global_script_class_alternatives[p_file->class_info.name];
+		sci = *p_sci;
+
+		ScriptClassAlternatives &scas = global_script_class_alternatives[sci.name];
 		scas.alternatives[p_path] = p_file;
 		scas.active = true;
 		scas.active_uid = p_file->uid;
 		scas.active_path = p_path;
 
-		ScriptServer::add_global_class(p_file->class_info.name, p_file->class_info.extends, p_file->class_info.lang, scas.active_path, p_file->class_info.is_abstract, p_file->class_info.is_tool, p_file->uid);
-		EditorNode::get_editor_data().script_class_set_icon_path(p_file->class_info.name, p_file->class_info.icon_path);
-		EditorNode::get_editor_data().script_class_set_name(scas.active_path, p_file->class_info.name);
-	}
-}
-
-void EditorFileSystem::_script_class_info_remove(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path) {
-	if (p_file->class_info.name.is_empty() || p_file->class_info.lang.is_empty()) {
-		return;
-	}
-	HashMap<StringName, ScriptClassAlternatives>::Iterator E = global_script_class_alternatives.find(p_file->class_info.name);
-	if (E) {
-		ScriptClassAlternatives &scas = E->value;
-		scas.alternatives.erase(p_path);
-
-		if (scas.active && scas.active_uid == p_file->uid && scas.active_path == p_path) {
-			ScriptServer::remove_global_class(p_file->class_info.name);
-			EditorHelp::remove_doc(p_file->class_info.name);
-
-			if (scas.alternatives.is_empty()) {
-				global_script_class_alternatives.erase(p_file->class_info.name);
-				EditorNode::get_editor_data().script_class_clear_icon_path(p_file->class_info.name);
-				EditorNode::get_editor_data().script_class_clear_name(p_path);
-			} else {
-				scas.active_path = scas.alternatives.begin()->key;
-				scas.active_uid = scas.alternatives.begin()->value->uid;
-
-				EditorFileSystemDirectory::FileInfo *fi = scas.alternatives[scas.active_path];
-
-				ScriptServer::add_global_class(fi->class_info.name, fi->class_info.extends, fi->class_info.lang, scas.active_path, fi->class_info.is_abstract, fi->class_info.is_tool, fi->uid);
-				EditorNode::get_editor_data().script_class_set_icon_path(fi->class_info.name, fi->class_info.icon_path);
-				EditorNode::get_editor_data().script_class_set_name(scas.active_path, fi->class_info.name);
-			}
+		if (!sci.icon_path.is_empty()) {
+			p_file->status |= EditorFileSystemDirectory::FileInfo::ICON_ADD;
 		}
-	} else {
-		ERR_PRINT(vformat("The file %s of the untracked global class %s was detected and removed.", p_path, p_file->class_info.name));
 	}
-}
 
-void EditorFileSystem::_script_class_info_update(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path) {
-	if (p_file->class_info.name.is_empty() || p_file->class_info.lang.is_empty()) {
-		return;
-	}
-	HashMap<StringName, ScriptClassAlternatives>::Iterator E = global_script_class_alternatives.find(p_file->class_info.name);
-	if (E) {
-		ScriptClassAlternatives &scas = E->value;
-		if (scas.active_uid == p_file->uid && scas.active_path == p_path) {
-			ScriptServer::add_global_class(p_file->class_info.name, p_file->class_info.extends, p_file->class_info.lang, scas.active_path, p_file->class_info.is_abstract, p_file->class_info.is_tool, p_file->uid);
-			EditorNode::get_editor_data().script_class_set_icon_path(p_file->class_info.name, p_file->class_info.icon_path);
-			EditorNode::get_editor_data().script_class_set_name(scas.active_path, p_file->class_info.name);
-		}
-	} else {
-		ERR_PRINT(vformat("The file %s of the untracked global class %s was detected and removed.", p_path, p_file->class_info.name));
+	if (updat_cache) {
+		ScriptServer::add_global_class(sci.name, sci.extends, sci.lang, p_path, sci.is_abstract, sci.is_tool, p_file->uid);
+		EditorNode::get_editor_data().script_class_set_icon_path(sci.name, sci.icon_path);
+		EditorNode::get_editor_data().script_class_set_name(p_path, sci.name);
 	}
 }
 
@@ -1512,7 +1523,7 @@ EditorFileSystemDirectory::FileInfo *EditorFileSystem::_file_info_add(EditorFile
 			fi->uid = ResourceLoader::get_resource_uid(path);
 		}
 
-		fi->class_info = _get_global_script_class(fi->type, path);
+		const ScriptClassInfo &sci = _get_global_script_class(fi->type, path);
 
 		if (fi->type.is_empty()) {
 			if (_validate_file_extension(p_file, other_file_extensions)) {
@@ -1526,7 +1537,7 @@ EditorFileSystemDirectory::FileInfo *EditorFileSystem::_file_info_add(EditorFile
 			_queue_update_scene_groups(path);
 		} else if (ClassDB::is_parent_class(fi->type, Script::get_class_static())) {
 			fi->status |= EditorFileSystemDirectory::FileInfo::IS_SCRIPT;
-			_script_class_info_add(fi, path);
+			_script_class_info_update(fi, path, &sci);
 		}
 	}
 
@@ -1569,10 +1580,7 @@ void EditorFileSystem::_file_info_remove(EditorFileSystemDirectory::FileInfo *p_
 	if (p_file->status & EditorFileSystemDirectory::FileInfo::IS_PACKEDSCENE) {
 		_queue_update_scene_groups(p_path);
 	} else if (p_file->status & EditorFileSystemDirectory::FileInfo::IS_SCRIPT) {
-		_script_class_info_remove(p_file, p_path);
-		// if (!p_file->class_info.icon_path.is_empty()) {
-		// 	update_files_icon_cache = true;
-		// }
+		_script_class_info_update(p_file, p_path, nullptr);
 	}
 }
 
@@ -1655,17 +1663,8 @@ void EditorFileSystem::_file_info_update(EditorFileSystemDirectory::FileInfo *p_
 
 	p_file->resource_script_class = ResourceLoader::get_resource_script_class(p_path);
 
-	const String old_script_class_icon_path = p_file->class_info.icon_path;
-
 	const ScriptClassInfo &sci = _get_global_script_class(p_file->type, p_path);
-	if (sci.name != p_file->class_info.name) {
-		_script_class_info_remove(p_file, p_path);
-		p_file->class_info = sci;
-		_script_class_info_add(p_file, p_path);
-	} else {
-		p_file->class_info = sci;
-		_script_class_info_update(p_file, p_path);
-	}
+	_script_class_info_update(p_file, p_path, &sci);
 
 	p_file->import_group_file = ResourceLoader::get_import_group_file(p_path);
 	p_file->deps = _get_dependencies(p_path);
@@ -1673,8 +1672,6 @@ void EditorFileSystem::_file_info_update(EditorFileSystemDirectory::FileInfo *p_
 
 	if (ClassDB::is_parent_class(p_file->type, Resource::get_class_static())) {
 		// files_to_update_icon_path.push_back(p_file);
-	} else if (old_script_class_icon_path != p_file->class_info.icon_path) {
-		// update_files_icon_cache = true;
 	}
 	{
 		// Update preview
