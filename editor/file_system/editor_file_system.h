@@ -84,19 +84,21 @@ class EditorFileSystemDirectory : public Object {
 			FILE_ADD = 1,
 			FILE_REMOVE = 1 << 1,
 			FILE_UPDATE = 1 << 2,
-
-			UID_UPDATE = 1 << 4,
-			UID_ADD = 1 << 5,
-			UID_REMOVE = 1 << 6,
+			UID_UPDATE = 1 << 3,
+			UID_ADD = 1 << 4,
+			UID_REMOVE = 1 << 5,
 			UID_OVERWRITE = UID_ADD | UID_REMOVE,
-
-			TYPE_UPDATE = 1 << 8,
-			TYPE_ADD = 1 << 9,
-			TYPE_REMOVE = 1 << 10,
+			TYPE_UPDATE = 1 << 6,
+			TYPE_ADD = 1 << 7,
+			TYPE_REMOVE = 1 << 8,
 			TYPE_OVERWRITE = TYPE_ADD | TYPE_REMOVE,
+			ICON_UPDATE = 1 << 9,
+			ICON_ADD = 1 << 10,
+			ICON_REMOVE = 1 << 11,
+			ICON_OVERWRITE = ICON_ADD | ICON_REMOVE,
 
-			HAS_CUSTOM_UID_SUPPORT = 1 << 12,
-			HAS_NO_CUSTOM_UID_SUPPORT = 1 << 13,
+			HAS_CUSTOM_UID_SUPPORT = 1 << 14,
+			HAS_NO_CUSTOM_UID_SUPPORT = 1 << 15,
 
 			AS_RESOURCE = 1 << 16,
 			IS_IMPORTABLE = 1 << 17,
@@ -234,9 +236,7 @@ class EditorFileSystem : public Node {
 
 	bool _load_filesystem_from_cache();
 
-	void _script_class_info_add(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path);
-	void _script_class_info_remove(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path);
-	void _script_class_info_update(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path);
+	void _script_class_info_update(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path, const EditorFileSystemDirectory::FileInfo::ScriptClassInfo *p_sci);
 
 	EditorFileSystemDirectory::FileInfo *_file_info_add(EditorFileSystemDirectory *p_parent_dir, const String &p_parent_path, const String &p_file, bool p_insert);
 	void _file_info_remove(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path, const int p_idx);
