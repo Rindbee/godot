@@ -196,7 +196,7 @@ class EditorFileSystem : public Node {
 			ACTION_FILE_ADD,
 			ACTION_FILE_REMOVE,
 			ACTION_FILE_UPDATE,
-			ACTION_FILE_TEST_REIMPORT,
+			ACTION_FILE_REIMPORT,
 			ACTION_FILE_RELOAD,
 			ACTION_UID_ADD,
 			ACTION_UID_REMOVE,
@@ -257,6 +257,7 @@ class EditorFileSystem : public Node {
 
 	void _category_validate(EditorFileInfo *p_file, const String &p_path);
 	void _type_analysis(EditorFileInfo *p_file, const StringName &p_new_type);
+	void _import_validate(EditorFileInfo *p_file, const String &p_path);
 	void _script_class_info_update(EditorFileInfo *p_file, const String &p_path, const ScriptClassInfo *p_sci);
 
 	EditorFileInfo *_file_info_add(EditorFileSystemDirectory *p_parent_dir, const String &p_parent_path, const String &p_file, bool p_insert);
@@ -359,8 +360,8 @@ class EditorFileSystem : public Node {
 	Error _reimport_file(const String &p_file, const HashMap<StringName, Variant> &p_custom_options = HashMap<StringName, Variant>(), const String &p_custom_importer = String(), Variant *generator_parameters = nullptr, bool p_update_file_system = true);
 	Error _reimport_group(const String &p_group_file, const Vector<String> &p_files);
 
-	bool _test_for_reimport(const String &p_path, const String &p_expected_import_md5);
-	bool _is_test_for_reimport_needed(const String &p_path, uint64_t p_last_modification_time, uint64_t p_modification_time, uint64_t p_last_import_modification_time, uint64_t p_import_modification_time, const Vector<String> &p_import_dest_paths);
+	bool _test_for_reimport(const String &p_path, EditorFileInfo *p_file);
+	bool _is_test_for_reimport_needed(EditorFileInfo *p_file, uint64_t p_modification_time, uint64_t p_internal_modification_time);
 	Vector<String> _get_import_dest_paths(const String &p_path);
 
 	bool reimport_on_missing_imported_files;
