@@ -550,7 +550,6 @@ bool EditorFileSystem::_load_filesystem_from_cache() {
 			}
 			_create_actions_from_uid_change(fi, path, split[2].to_int());
 		} else {
-			// _type_analysis(fi,split[1].get_slicec('/', 0) );
 			fi->type = split[1].get_slicec('/', 0);
 			if (fi->type.is_empty() || fi->type == "OtherFile" || fi->type == "TextFile") {
 				fi->status &= ~EditorFileInfo::AS_RESOURCE;
@@ -640,33 +639,31 @@ void EditorFileSystem::_thread_func(void *_userdata) {
 	sd->scanning_done.set();
 }
 
-bool EditorFileSystem::_is_test_for_reimport_needed(const String &p_path, uint64_t p_last_modification_time, uint64_t p_modification_time, uint64_t p_last_import_modification_time, uint64_t p_import_modification_time, const Vector<String> &p_import_dest_paths) {
-	// The idea here is to trust the cache. If the last modification times in the cache correspond
-	// to the last modification times of the files on disk, it means the files have not changed since
-	// the last import, and the files in .godot/imported (p_import_dest_paths) should all be valid.
-	if (p_last_modification_time != p_modification_time) {
+bool EditorFileSystem::_is_test_for_reimport_needed(EditorFileInfo *p_file, uint64_t p_modification_time, uint64_t p_internal_modification_time) {
+	if (p_modification_time != p_file->modified_time || p_internal_modification_time != p_file->internal_modified_time) {
+		// Need to check further, update the timestamp in case re-import is not necessary.
+		p_file->modified_time = p_modification_time;
+		p_file->internal_modified_time = p_internal_modification_time;
 		return true;
 	}
-	if (p_last_import_modification_time != p_import_modification_time) {
-		return true;
+	if (!reimport_on_missing_imported_files) {
+		return false;
 	}
-	if (reimport_on_missing_imported_files) {
-		for (const String &path : p_import_dest_paths) {
-			if (!FileAccess::exists(path)) {
-				return true;
-			}
+	for (const String &path : p_file->import_dest_paths) {
+		if (!FileAccess::exists(path)) {
+			return true;
 		}
 	}
 	return false;
 }
 
-bool EditorFileSystem::_test_for_reimport(const String &p_path, const String &p_expected_import_md5) {
-	if (p_expected_import_md5.is_empty()) {
+bool EditorFileSystem::_test_for_reimport(const String &p_path, EditorFileInfo *p_file) {
+	if (p_file->import_md5.is_empty()) {
 		// Marked as reimportation needed.
 		return true;
 	}
 	String new_md5 = FileAccess::get_md5(p_path + ".import");
-	if (p_expected_import_md5 != new_md5) {
+	if (p_file->import_md5 != new_md5) {
 		return true;
 	}
 
@@ -1064,34 +1061,8 @@ bool EditorFileSystem::_update_scan_actions() {
 				ERR_CONTINUE(!ia.file);
 				fs_changed = true;
 			} break;
-			case ItemAction::ACTION_FILE_TEST_REIMPORT: {
-				// int idx = ia.dir->find_file_index(ia.file_name);
-				// ERR_CONTINUE(idx == -1);
-				String full_path = ia.path;
-
-				bool need_reimport = _test_for_reimport(full_path, ia.file->import_md5);
-				if (need_reimport) {
-					// Must reimport.
-					reimports.push_back(full_path);
-					Vector<String> dependencies = _get_dependencies(full_path);
-					for (const String &dep : dependencies) {
-						const String &dependency_path = dep.contains("::") ? dep.get_slice("::", 0) : dep;
-						if (_validate_file_extension(dep, import_extensions)) {
-							reimports.push_back(dependency_path);
-						}
-					}
-				} else {
-					// Must not reimport, all was good.
-					// Update modified times, md5 and destination paths, to avoid reimport.
-					ia.file->modified_time = FileAccess::get_modified_time(full_path);
-					ia.file->internal_modified_time = FileAccess::get_modified_time(full_path + ".import");
-					if (ia.file->import_md5.is_empty()) {
-						ia.file->import_md5 = FileAccess::get_md5(full_path + ".import");
-					}
-					ia.file->import_dest_paths = _get_import_dest_paths(full_path);
-				}
-
-				fs_changed = true;
+			case ItemAction::ACTION_FILE_REIMPORT: {
+				reimports.push_back(ia.path);
 			} break;
 			case ItemAction::ACTION_UID_ADD: {
 				print_verbose(vformat("[%.6f] [ADD UID] old uid: %s, uid: %s, path: %s.",
@@ -1430,6 +1401,62 @@ void EditorFileSystem::_type_analysis(EditorFileInfo *p_file, const StringName &
 	}
 }
 
+void EditorFileSystem::_import_validate(EditorFileInfo *p_file, const String &p_path) {
+	// If an import file exists, then FileInfo is updated from the import file after comparison.
+	// This avoids missing and/or re-reading data.
+	ERR_FAIL_NULL(p_file);
+	if (!FileAccess::exists(p_path + ".import")) {
+		// Import directly.
+		_create_action(nullptr, p_file, p_path, ItemAction::ACTION_FILE_REIMPORT);
+
+		const ResourceUID::ID old_uid = p_file->uid;
+		p_file->uid = ResourceUID::INVALID_ID;
+		_create_actions_from_uid_change(p_file, p_path, old_uid);
+		return;
+	}
+	const uint64_t mt = FileAccess::get_modified_time(p_path);
+	const uint64_t import_mt = FileAccess::get_modified_time(p_path + ".import");
+	if (!_is_test_for_reimport_needed(p_file, mt, import_mt) &&
+			(!first_scan || !revalidate_import_files || ResourceFormatImporter::get_singleton()->are_import_settings_valid(p_path))) {
+		if (first_scan) {
+			// In case the uid cache has not been loaded yet.
+			const ResourceUID::ID old_uid = p_file->uid;
+			p_file->uid = ResourceLoader::get_resource_uid(p_path);
+			_create_actions_from_uid_change(p_file, p_path, old_uid);
+		}
+		return;
+	}
+	bool need_reimport = _test_for_reimport(p_path, p_file);
+	if (need_reimport) {
+		// Must reimport.
+		_create_action(nullptr, p_file, p_path, ItemAction::ACTION_FILE_REIMPORT);
+
+		const ResourceUID::ID old_uid = p_file->uid;
+		p_file->uid = ResourceLoader::get_resource_uid(p_path);
+		_create_actions_from_uid_change(p_file, p_path, old_uid);
+
+		Vector<String> dependencies = _get_dependencies(p_path);
+		for (const String &dep : dependencies) {
+			const String &dependency_path = dep.contains("::") ? dep.get_slice("::", 0) : dep;
+			if (_validate_file_extension(dependency_path, import_extensions)) {
+				// Import these.
+				_create_action(nullptr, nullptr, dependency_path, ItemAction::ACTION_FILE_REIMPORT);
+			}
+		}
+		return;
+	}
+	// Must not reimport, all was good.
+	// Update modified times, md5 and destination paths, to avoid reimport.
+	p_file->modified_time = mt;
+	p_file->internal_modified_time = import_mt;
+	p_file->import_dest_paths = _get_import_dest_paths(p_path);
+	if (first_scan) {
+		const ResourceUID::ID old_uid = p_file->uid;
+		p_file->uid = ResourceLoader::get_resource_uid(p_path);
+		_create_actions_from_uid_change(p_file, p_path, old_uid);
+	}
+}
+
 void EditorFileSystem::_script_class_info_update(EditorFileInfo *p_file, const String &p_path, const ScriptClassInfo *p_sci) {
 	ScriptClassInfo &sci = p_file->class_info;
 
@@ -1550,27 +1577,18 @@ EditorFileSystemDirectory::FileInfo *EditorFileSystem::_file_info_add(EditorFile
 	fi->file = p_file;
 	_category_validate(fi, path);
 
+	if (fi->status & EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE) {
+		_import_validate(fi, path);
+		return fi;
+	}
+
 	if (is_reused) {
 		if (!fi->type.is_empty()) {
 			fi->status |= EditorFileInfo::TYPE_ADD;
 		}
 	} else {
-		StringName new_type;
-		if (fi->status & EditorFileInfo::IS_IMPORTABLE) {
-			// If it can be imported, and it was added, it needs to be reimported.
-			if (!FileAccess::exists(path + ".import")) {
-				// TODO: No test required.
-				_create_action(nullptr, fi, path, ItemAction::ACTION_FILE_TEST_REIMPORT, ItemAction::STEP_UID_NEWLY_ADD, fi->uid);
-				return fi;
-			}
-			// Using get_resource_import_info() to prevent calling 3 times ResourceFormatImporter::_get_path_and_type.
-			ResourceFormatImporter::get_singleton()->get_resource_import_info(path, new_type, fi->uid, fi->import_group_file);
-		} else {
-			new_type = ResourceLoader::get_resource_type(path);
-			fi->uid = ResourceLoader::get_resource_uid(path);
-		}
-		_type_analysis(fi, new_type);
-
+		_type_analysis(fi, ResourceLoader::get_resource_type(path));
+		fi->uid = ResourceLoader::get_resource_uid(path);
 		if (fi->status & EditorFileInfo::IS_PACKEDSCENE) {
 			_queue_update_scene_groups(path);
 		} else if (fi->status & EditorFileInfo::IS_SCRIPT) {
@@ -1580,19 +1598,11 @@ EditorFileSystemDirectory::FileInfo *EditorFileSystem::_file_info_add(EditorFile
 	}
 
 	fi->modified_time = FileAccess::get_modified_time(path);
-
-	if (fi->status & EditorFileInfo::IS_IMPORTABLE) {
-		fi->import_md5 = FileAccess::get_md5(path + ".import");
-		fi->import_dest_paths = _get_import_dest_paths(path);
-		fi->internal_modified_time = FileAccess::get_modified_time(path + ".import");
-	} else {
-		fi->import_md5 = "";
-		fi->deps = _get_dependencies(path);
-		fi->resource_script_class = ResourceLoader::get_resource_script_class(path);
-		fi->import_group_file = ResourceLoader::get_import_group_file(path);
-		fi->internal_modified_time = (fi->status & EditorFileInfo::HAS_CUSTOM_UID_SUPPORT) ? 0 : FileAccess::get_modified_time(path + ".uid");
-	}
-
+	fi->import_md5 = "";
+	fi->deps = _get_dependencies(path);
+	fi->resource_script_class = ResourceLoader::get_resource_script_class(path);
+	fi->import_group_file = ResourceLoader::get_import_group_file(path);
+	fi->internal_modified_time = (fi->status & EditorFileInfo::HAS_CUSTOM_UID_SUPPORT) ? 0 : FileAccess::get_modified_time(path + ".uid");
 	fi->import_valid = !(fi->status & EditorFileInfo::AS_RESOURCE) || ResourceLoader::is_import_valid(path);
 
 	_create_actions_from_uid_change(fi, path, fi->uid);
@@ -1620,34 +1630,30 @@ void EditorFileSystem::_file_info_remove(EditorFileInfo *p_file, const String &p
 
 void EditorFileSystem::_file_info_update(EditorFileInfo *p_file, const String &p_path) {
 	const uint32_t old_status = p_file->status;
-	if (scanning_settings_changed) {
-		if (!first_scan) {
-			_category_validate(p_file, p_path);
-		}
-		if (!first_scan || !(p_file->status & EditorFileInfo::IS_SCRIPT)) {
-			_type_analysis(p_file, ResourceLoader::get_resource_type(p_path));
-		}
+	if (scanning_settings_changed && !first_scan) {
+		_category_validate(p_file, p_path);
 	}
 
-	const uint64_t mt = FileAccess::get_modified_time(p_path);
-
 	if (p_file->status & EditorFileInfo::IS_IMPORTABLE) {
-		// Check here if file must be imported or not.
-		// Same logic as in _process_file_system, the last modifications dates
-		// needs to be trusted to prevent reading all the .import files and the md5
-		// each time the user switch back to Godot.
-		const uint64_t import_mt = FileAccess::get_modified_time(p_path + ".import");
-		if (_is_test_for_reimport_needed(p_path, p_file->modified_time, mt, p_file->internal_modified_time, import_mt, p_file->import_dest_paths)) {
-			ItemAction ia;
-			ia.action = ItemAction::ACTION_FILE_TEST_REIMPORT;
-			ia.path = p_path;
-			ia.file = p_file;
-			scan_actions.push_back(ia);
-		}
+		// TODO: Clean up the previous state.
+		// if (old_status & EditorFileInfo::IS_PACKEDSCENE) {
+		// 	_queue_update_scene_groups(p_path);
+		// }
+		// if (old_status & EditorFileInfo::IS_SCRIPT) {
+		// 	_script_class_info_update(p_file, p_path, nullptr);
+		// }
+
+		_import_validate(p_file, p_path);
 		return;
 	} else if (old_status & EditorFileInfo::IS_IMPORTABLE) {
 		// TODO: Clear code.
 	}
+
+	if (scanning_settings_changed && (!first_scan || !(p_file->status & EditorFileInfo::IS_SCRIPT))) {
+		_type_analysis(p_file, ResourceLoader::get_resource_type(p_path));
+	}
+
+	const uint64_t mt = FileAccess::get_modified_time(p_path);
 
 	if (mt == p_file->modified_time && !(p_file->status & EditorFileInfo::TYPE_CHANGED)) {
 		if (!(p_file->status & EditorFileInfo::AS_RESOURCE)) {
@@ -1663,14 +1669,12 @@ void EditorFileSystem::_file_info_update(EditorFileInfo *p_file, const String &p
 				(internal_mt == p_file->internal_modified_time && internal_mt != 0)) {
 			// The UID is not changed, but prevents invalidation of the UID cache on editor startup.
 			if (first_scan && !(p_file->status & EditorFileInfo::IS_SCRIPT)) {
-				p_file->status |= EditorFileInfo::FILE_UPDATE;
 				_create_actions_from_uid_change(p_file, p_path, p_file->uid);
 			}
 			return;
 		}
 
 		if (!first_scan || !(p_file->status & EditorFileInfo::IS_SCRIPT)) {
-			p_file->status |= EditorFileInfo::FILE_UPDATE;
 			p_file->internal_modified_time = internal_mt; // The file system cache may not have been saved the last time the editor exited.
 
 			const ResourceUID::ID old_uid = p_file->uid;
@@ -1679,7 +1683,6 @@ void EditorFileSystem::_file_info_update(EditorFileInfo *p_file, const String &p
 		}
 		return;
 	}
-	p_file->status |= EditorFileInfo::FILE_UPDATE;
 	_create_action(nullptr, p_file, p_path, ItemAction::ACTION_FILE_UPDATE, ItemAction::STEP_CLEAR_STATUS);
 	p_file->modified_time = mt;
 
@@ -3042,9 +3045,11 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 
 	EditorFileSystemDirectory *fs = nullptr;
 	int cpos = -1;
+	EditorFileInfo *fi = nullptr;
 	if (p_update_file_system) {
 		bool found = _find_file(p_file, &fs, cpos);
 		ERR_FAIL_COND_V_MSG(!found, ERR_FILE_NOT_FOUND, vformat("Can't find file '%s' during file reimport.", p_file));
+		fi = fs->files[cpos];
 	}
 
 	//try to obtain existing params
@@ -3056,7 +3061,7 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 		importer_name = p_custom_importer;
 	}
 
-	ResourceUID::ID uid = ResourceUID::INVALID_ID;
+	ResourceUID::ID uid = p_update_file_system ? fi->uid : ResourceUID::INVALID_ID;
 	Variant generator_parameters;
 	if (p_generator_parameters) {
 		generator_parameters = *p_generator_parameters;
@@ -3082,7 +3087,7 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 					importer_name = cf->get_value("remap", "importer");
 				}
 
-				if (cf->has_section_key("remap", "uid")) {
+				if (!p_update_file_system && cf->has_section_key("remap", "uid")) {
 					String uidt = cf->get_value("remap", "uid");
 					uid = ResourceUID::get_singleton()->text_to_id(uidt);
 				}
@@ -3099,13 +3104,13 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 	if (importer_name == "keep" || importer_name == "skip") {
 		//keep files, do nothing.
 		if (p_update_file_system) {
-			fs->files[cpos]->modified_time = FileAccess::get_modified_time(p_file);
-			fs->files[cpos]->internal_modified_time = FileAccess::get_modified_time(p_file + ".import");
-			fs->files[cpos]->import_md5 = FileAccess::get_md5(p_file + ".import");
-			fs->files[cpos]->import_dest_paths = Vector<String>();
-			fs->files[cpos]->deps.clear();
-			fs->files[cpos]->type = "";
-			fs->files[cpos]->import_valid = false;
+			fi->modified_time = FileAccess::get_modified_time(p_file);
+			fi->internal_modified_time = FileAccess::get_modified_time(p_file + ".import");
+			fi->import_md5 = FileAccess::get_md5(p_file + ".import");
+			fi->import_dest_paths = Vector<String>();
+			fi->deps.clear();
+			fi->type = "";
+			fi->import_valid = false;
 			EditorResourcePreview::get_singleton()->check_for_invalidation(p_file);
 		}
 		return OK;
@@ -3268,11 +3273,6 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 	}
 
 	if (p_update_file_system) {
-		// Update cpos, newly created files could've changed the index of the reimported p_file.
-		_find_file(p_file, &fs, cpos);
-
-		EditorFileInfo *fi = fs->files[cpos];
-
 		// Update modified times, to avoid reimport.
 		fi->modified_time = FileAccess::get_modified_time(p_file);
 		fi->internal_modified_time = FileAccess::get_modified_time(p_file + ".import");
@@ -3462,9 +3462,12 @@ void EditorFileSystem::_refresh_filesystem() {
 	}
 	folders_to_sort.clear();
 
-	_update_scan_actions();
+	if (dirty_directories.is_empty()) {
+		// Avoid calling _update_scan_actions() repeatedly.
+		_update_scan_actions();
+		emit_signal(SNAME("filesystem_changed"));
+	}
 
-	emit_signal(SNAME("filesystem_changed"));
 	refresh_queued = false;
 }
 
