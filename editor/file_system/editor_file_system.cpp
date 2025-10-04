@@ -536,18 +536,8 @@ bool EditorFileSystem::_load_filesystem_from_cache() {
 		if (is_reused) {
 			_create_actions_from_uid_change(fi, path, split[2].to_int());
 		} else {
-			// _type_analysis(fi,split[1].get_slicec('/', 0) );
 			fi->type = split[1].get_slicec('/', 0);
 			fi->uid = split[2].to_int();
-
-			if (fi->status & EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE) {
-				// If it can be imported, and it was added, it needs to be reimported.
-				ItemAction ia;
-				ia.action = ItemAction::ACTION_FILE_TEST_REIMPORT;
-				ia.path = path;
-				ia.file = fi;
-				scan_actions.push_back(ia);
-			}
 			if (ClassDB::is_parent_class(fi->type, Script::get_class_static())) {
 				fi->status |= EditorFileSystemDirectory::FileInfo::IS_SCRIPT;
 			} else if (fi->type == PackedScene::get_class_static()) {
@@ -656,21 +646,19 @@ void EditorFileSystem::_thread_func(void *_userdata) {
 	sd->scanning_done.set();
 }
 
-bool EditorFileSystem::_is_test_for_reimport_needed(const String &p_path, uint64_t p_last_modification_time, uint64_t p_modification_time, uint64_t p_last_import_modification_time, uint64_t p_import_modification_time, const Vector<String> &p_import_dest_paths) {
-	// The idea here is to trust the cache. If the last modification times in the cache correspond
-	// to the last modification times of the files on disk, it means the files have not changed since
-	// the last import, and the files in .godot/imported (p_import_dest_paths) should all be valid.
-	if (p_last_modification_time != p_modification_time) {
+bool EditorFileSystem::_is_test_for_reimport_needed(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path, uint64_t p_modification_time, uint64_t p_internal_modification_time) {
+	if (p_modification_time != p_file->modified_time) {
 		return true;
 	}
-	if (p_last_import_modification_time != p_import_modification_time) {
+	if (p_internal_modification_time != p_file->internal_modified_time) {
 		return true;
 	}
-	if (reimport_on_missing_imported_files) {
-		for (const String &path : p_import_dest_paths) {
-			if (!FileAccess::exists(path)) {
-				return true;
-			}
+	if (!reimport_on_missing_imported_files) {
+		return false;
+	}
+	for (const String &path : p_file->import_dest_paths) {
+		if (!FileAccess::exists(path)) {
+			return true;
 		}
 	}
 	return false;
@@ -1444,6 +1432,24 @@ void EditorFileSystem::_type_analysis(EditorFileSystemDirectory::FileInfo *p_fil
 	}
 }
 
+void EditorFileSystem::_import_validate(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path) {
+	ERR_FAIL_NULL(p_file);
+	// if (!(p_file->status & EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE)) {
+	// 	return;
+	// }
+	const uint64_t mt = FileAccess::get_modified_time(p_path);
+	const uint64_t import_mt = FileAccess::get_modified_time(p_path + ".import");
+	if (!_is_test_for_reimport_needed(p_file, p_path, mt, import_mt) &&
+			(!revalidate_import_files || ResourceFormatImporter::get_singleton()->are_import_settings_valid(p_path))) {
+		return;
+	}
+	ItemAction ia;
+	ia.action = ItemAction::ACTION_FILE_TEST_REIMPORT;
+	ia.path = p_path;
+	ia.file = p_file;
+	scan_actions.push_back(ia);
+}
+
 void EditorFileSystem::_script_class_info_update(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path, const EditorFileSystemDirectory::FileInfo::ScriptClassInfo *p_sci) {
 	EditorFileSystemDirectory::FileInfo::ScriptClassInfo &sci = p_file->class_info;
 
@@ -1642,23 +1648,19 @@ void EditorFileSystem::_file_info_update(EditorFileSystemDirectory::FileInfo *p_
 		_type_analysis(p_file, ResourceLoader::get_resource_type(p_path));
 	}
 
-	const uint64_t mt = FileAccess::get_modified_time(p_path);
-
 	if (p_file->status & EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE) {
 		// Check here if file must be imported or not.
 		// Same logic as in _process_file_system, the last modifications dates
 		// needs to be trusted to prevent reading all the .import files and the md5
 		// each time the user switch back to Godot.
-		const uint64_t import_mt = FileAccess::get_modified_time(p_path + ".import");
-		if (_is_test_for_reimport_needed(p_path, p_file->modified_time, mt, p_file->internal_modified_time, import_mt, p_file->import_dest_paths)) {
-			ItemAction ia;
-			ia.action = ItemAction::ACTION_FILE_TEST_REIMPORT;
-			ia.path = p_path;
-			ia.file = p_file;
-			scan_actions.push_back(ia);
-		}
+
+		_import_validate(p_file, p_path);
 		return;
+	} else if (old_status & EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE) {
+		// Clear code.
 	}
+
+	const uint64_t mt = FileAccess::get_modified_time(p_path);
 
 	if (mt == p_file->modified_time && !(p_file->status & EditorFileSystemDirectory::FileInfo::TYPE_OVERWRITE)) {
 		if (!(p_file->status & EditorFileSystemDirectory::FileInfo::AS_RESOURCE)) {
