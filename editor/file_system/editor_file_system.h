@@ -252,6 +252,7 @@ class EditorFileSystem : public Node {
 
 	void _category_validate(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path);
 	void _type_analysis(EditorFileSystemDirectory::FileInfo *p_file, const StringName &p_new_type);
+	void _import_validate(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path);
 	void _script_class_info_update(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path, const EditorFileSystemDirectory::FileInfo::ScriptClassInfo *p_sci);
 
 	EditorFileSystemDirectory::FileInfo *_file_info_add(EditorFileSystemDirectory *p_parent_dir, const String &p_parent_path, const String &p_file, bool p_insert);
@@ -356,7 +357,7 @@ class EditorFileSystem : public Node {
 	Error _reimport_group(const String &p_group_file, const Vector<String> &p_files);
 
 	bool _test_for_reimport(const String &p_path, const String &p_expected_import_md5);
-	bool _is_test_for_reimport_needed(const String &p_path, uint64_t p_last_modification_time, uint64_t p_modification_time, uint64_t p_last_import_modification_time, uint64_t p_import_modification_time, const Vector<String> &p_import_dest_paths);
+	bool _is_test_for_reimport_needed(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path, uint64_t p_modification_time, uint64_t p_internal_modification_time);
 	Vector<String> _get_import_dest_paths(const String &p_path);
 
 	bool reimport_on_missing_imported_files;
