@@ -37,6 +37,7 @@
 #include "core/os/thread_safe.h"
 #include "core/templates/hash_set.h"
 #include "core/templates/safe_refcount.h"
+#include "editor/file_system/file_info.h"
 #include "scene/main/node.h"
 
 class FileAccess;
@@ -191,6 +192,9 @@ class EditorFileSystem : public Node {
 
 	_THREAD_SAFE_CLASS_
 
+	using EditorFileInfo = EditorFileSystemDirectory::FileInfo;
+	using ScriptClassInfo = EditorFileInfo::ScriptClassInfo;
+
 	struct ItemAction {
 		enum Action {
 			ACTION_NONE,
@@ -212,7 +216,7 @@ class EditorFileSystem : public Node {
 		ResourceUID::ID old_uid = ResourceUID::INVALID_ID; // Only used for UID actions. Can be used as a fallback value or a delete value.
 		String path; // In order to reduce the count of path calculations.
 		EditorFileSystemDirectory *dir = nullptr;
-		EditorFileSystemDirectory::FileInfo *file = nullptr; // Make sure it is up to date.
+		EditorFileInfo *file = nullptr; // Make sure it is up to date.
 	};
 
 	struct ScannedDirectory {
@@ -246,13 +250,13 @@ class EditorFileSystem : public Node {
 
 	bool _load_filesystem_from_cache();
 
-	void _category_validate(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path);
-	void _type_analysis(EditorFileSystemDirectory::FileInfo *p_file, const StringName &p_new_type);
-	void _script_class_info_update(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path, const EditorFileSystemDirectory::FileInfo::ScriptClassInfo *p_sci);
+	void _category_validate(EditorFileInfo *p_file, const String &p_path);
+	void _type_analysis(EditorFileInfo *p_file, const StringName &p_new_type);
+	void _script_class_info_update(EditorFileInfo *p_file, const String &p_path, const ScriptClassInfo *p_sci);
 
-	EditorFileSystemDirectory::FileInfo *_file_info_add(EditorFileSystemDirectory *p_parent_dir, const String &p_parent_path, const String &p_file, bool p_insert);
-	void _file_info_remove(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path, const int p_idx);
-	void _file_info_update(EditorFileSystemDirectory::FileInfo *p_file, const String &p_path);
+	EditorFileInfo *_file_info_add(EditorFileSystemDirectory *p_parent_dir, const String &p_parent_path, const String &p_file, bool p_insert);
+	void _file_info_remove(EditorFileInfo *p_file, const String &p_path, const int p_idx);
+	void _file_info_update(EditorFileInfo *p_file, const String &p_path);
 
 	int _dir_info_remove(EditorFileSystemDirectory *p_dir, const String &p_path, const int p_idx);
 
@@ -269,7 +273,6 @@ class EditorFileSystem : public Node {
 
 	static EditorFileSystem *singleton;
 
-	using ScriptClassInfo = EditorFileSystemDirectory::FileInfo::ScriptClassInfo;
 	/* Used for reading the filesystem cache file */
 	struct FileCache {
 		StringName type;
@@ -340,7 +343,7 @@ class EditorFileSystem : public Node {
 	List<ItemAction>::Element *fi_remove_point;
 
 	void _reset_points();
-	void _create_actions_from_uid_change(EditorFileSystemDirectory::FileInfo *p_fi, const String &p_path, const ResourceUID::ID p_uid = ResourceUID::INVALID_ID);
+	void _create_actions_from_uid_change(EditorFileInfo *p_fi, const String &p_path, const ResourceUID::ID p_uid = ResourceUID::INVALID_ID);
 
 	bool _update_scan_actions();
 
@@ -370,7 +373,7 @@ class EditorFileSystem : public Node {
 		ScriptClassInfoUpdate() = default;
 		explicit ScriptClassInfoUpdate(const ScriptClassInfo &p_info) :
 				ScriptClassInfo(p_info) {}
-		static ScriptClassInfoUpdate from_file_info(const EditorFileSystemDirectory::FileInfo *p_fi) {
+		static ScriptClassInfoUpdate from_file_info(const EditorFileInfo *p_fi) {
 			ScriptClassInfoUpdate update;
 			update.type = p_fi->type;
 			update.name = p_fi->class_info.name;
@@ -383,12 +386,12 @@ class EditorFileSystem : public Node {
 		}
 	};
 
-	HashMap<String, EditorFileSystemDirectory::FileInfo *> script_file_info;
+	HashMap<String, EditorFileInfo *> script_file_info;
 	struct ScriptClassAlternatives {
 		bool active = false;
 		String active_path;
 		ResourceUID::ID active_uid = ResourceUID::INVALID_ID;
-		HashMap<String, EditorFileSystemDirectory::FileInfo *> alternatives;
+		HashMap<String, EditorFileInfo *> alternatives;
 	};
 	HashMap<StringName, ScriptClassAlternatives> global_script_class_alternatives;
 	void _update_global_script_class_activation();
@@ -447,10 +450,10 @@ class EditorFileSystem : public Node {
 
 	Vector<Ref<EditorFileSystemImportFormatSupportQuery>> import_support_queries;
 
-	void _update_file_icon_path(EditorFileSystemDirectory::FileInfo *file_info);
+	void _update_file_icon_path(EditorFileInfo *file_info);
 	void _update_files_icon_path(EditorFileSystemDirectory *edp = nullptr);
 	bool _remove_invalid_global_class_names(const HashSet<String> &p_existing_class_names);
-	String _get_file_by_class_name(EditorFileSystemDirectory *p_dir, const String &p_class_name, EditorFileSystemDirectory::FileInfo *&r_file_info);
+	String _get_file_by_class_name(EditorFileSystemDirectory *p_dir, const String &p_class_name, EditorFileInfo *&r_file_info);
 
 	void _register_global_class_script(const String &p_search_path, const String &p_target_path, const ScriptClassInfoUpdate &p_script_update);
 
