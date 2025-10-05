@@ -37,7 +37,6 @@
 #include "core/os/thread_safe.h"
 #include "core/templates/hash_set.h"
 #include "core/templates/safe_refcount.h"
-#include "editor/file_system/file_info.h"
 #include "scene/main/node.h"
 
 class FileAccess;
@@ -65,7 +64,7 @@ class EditorFileSystemDirectory : public Object {
 		uint64_t internal_modified_time = 0;
 		String import_md5;
 		Vector<String> import_dest_paths;
-		bool import_valid = true;
+		bool import_valid = false;
 		String import_group_file;
 		Vector<String> deps;
 		bool verified = true; // Used for checking changes.
@@ -85,29 +84,21 @@ class EditorFileSystemDirectory : public Object {
 			FILE_REMOVE = 1 << 1,
 			FILE_UPDATE = 1 << 2,
 			FILE_CHANGED = FILE_ADD | FILE_REMOVE | FILE_UPDATE,
-			UID_ADD = 1 << 3,
-			UID_REMOVE = 1 << 4,
-			UID_UPDATE = 1 << 5,
-			UID_OVERWRITE = UID_ADD | UID_REMOVE,
-			UID_CHANGED = UID_ADD | UID_REMOVE | UID_UPDATE,
-			TYPE_ADD = 1 << 6,
-			TYPE_REMOVE = 1 << 7,
-			TYPE_UPDATE = 1 << 8,
-			TYPE_OVERWRITE = TYPE_ADD | TYPE_REMOVE,
-			TYPE_CHANGED = TYPE_ADD | TYPE_REMOVE | TYPE_UPDATE,
-			ICON_ADD = 1 << 9,
-			ICON_REMOVE = 1 << 10,
-			ICON_UPDATE = 1 << 11,
+			TYPE_ADD = 1 << 4,
+			TYPE_REMOVE = 1 << 5,
+			TYPE_CHANGED = TYPE_ADD | TYPE_REMOVE,
+			ICON_ADD = 1 << 8,
+			ICON_REMOVE = 1 << 9,
+			ICON_UPDATE = 1 << 10,
 			ICON_OVERWRITE = ICON_ADD | ICON_REMOVE,
 			ICON_CHANGED = ICON_ADD | ICON_REMOVE | ICON_UPDATE,
-			TIMESTAMP_MODIFIED = 1 << 12, // The file was modified during scan, so the timestamp needs to be updated.
+			TEMPORARY = FILE_CHANGED | TYPE_CHANGED | ICON_CHANGED,
 
-			TEMPORARY = FILE_CHANGED | UID_CHANGED | TYPE_CHANGED | ICON_CHANGED | TIMESTAMP_MODIFIED,
+			IS_ORPHAN = 1 << 12,
+			HAS_CUSTOM_UID_SUPPORT = 1 << 13,
 
-			HAS_CUSTOM_UID_SUPPORT = 1 << 16,
-
-			IS_SCRIPT = 1 << 17,
-			IS_PACKEDSCENE = 1 << 18,
+			IS_SCRIPT = 1 << 16,
+			IS_PACKEDSCENE = 1 << 17,
 			SPECIAL_TYPE = IS_SCRIPT | IS_PACKEDSCENE,
 
 			AS_RESOURCE = 1 << 28,
@@ -210,16 +201,26 @@ class EditorFileSystem : public Node {
 			ACTION_UID_ADD,
 			ACTION_UID_REMOVE,
 			ACTION_UID_PENDING_ADD,
-			ACTION_TYPE_ADD,
-			ACTION_TYPE_REMOVE,
-			ACTION_TYPE_PENDING_ADD,
+		};
+
+		enum Step {
+			STEP_UID_VALIDATE, // Verify the validity of the uid cache. Only when the editor starts.
+			STEP_UID_NEWLY_ADD, // Create and add new uids to files that do not have uids assigned to them.
+			STEP_UID_REMOVE, // Remove the outdated UID from the file info cache.
+			STEP_UID_PENDING_ADD, // Add the new UID obtained from the file.
+			STEP_UID_REGENERATE, // Recreate and add a new uid if the uid is already taken.
+			STEP_NORMAL,
+			STEP_CLEAR_STATUS, // Clear the temporary flag of the file status for next use.
+			STEP_FILE_REMOVE,
+			STEP_DIR_REMOVE,
+			STEP_MAX,
 		};
 
 		Action action = ACTION_NONE;
 		ResourceUID::ID old_uid = ResourceUID::INVALID_ID; // Only used for UID actions. Can be used as a fallback value or a delete value.
 		String path; // In order to reduce the count of path calculations.
 		EditorFileSystemDirectory *dir = nullptr;
-		EditorFileInfo *file = nullptr; // Make sure it is up to date.
+		EditorFileInfo *file = nullptr;
 	};
 
 	struct ScannedDirectory {
@@ -344,14 +345,14 @@ class EditorFileSystem : public Node {
 	List<String> sources_changed;
 	List<ItemAction> scan_actions;
 
-	List<ItemAction>::Element *uid_add_end;
-	List<ItemAction>::Element *uid_remove_end;
-	List<ItemAction>::Element *uid_pending_add_end;
-	List<ItemAction>::Element *uid_analyze_end;
-	List<ItemAction>::Element *fi_remove_point;
+	List<ItemAction>::Element *uid_newly_add_end;
+	List<ItemAction>::Element *uid_move_end;
+	List<ItemAction>::Element *normal;
+	List<ItemAction>::Element *remove_point;
 
 	void _reset_points();
-	void _create_actions_from_uid_change(EditorFileInfo *p_fi, const String &p_path, const ResourceUID::ID p_uid = ResourceUID::INVALID_ID);
+	void _create_action(EditorFileSystemDirectory *p_dir, EditorFileInfo *p_fi, const String &p_path, const ItemAction::Action p_action, const ItemAction::Step p_step = ItemAction::STEP_NORMAL, const ResourceUID::ID p_old_uid = ResourceUID::INVALID_ID);
+	void _create_actions_from_uid_change(EditorFileInfo *p_fi, const String &p_path, const ResourceUID::ID p_old_uid = ResourceUID::INVALID_ID);
 
 	bool _update_scan_actions();
 
