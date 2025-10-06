@@ -1132,6 +1132,7 @@ bool EditorFileSystem::_update_scan_actions() {
 				print_verbose(vformat("[ADD UID] %s, %s", ia.path, ResourceUID::get_singleton()->id_to_text(ia.file->uid)));
 				// Update class cache.
 				if (ia.file->status & EditorFileInfo::IS_SCRIPT) {
+					_script_class_info_update(ia.file, ia.path, &ia.file->class_info);
 				}
 			} break;
 			case ItemAction::ACTION_UID_REMOVE: {
@@ -1165,6 +1166,10 @@ bool EditorFileSystem::_update_scan_actions() {
 					}
 				} else {
 					ResourceUID::get_singleton()->add_id(ia.file->uid, ia.path);
+					// Update class cache.
+					if (ia.file->status & EditorFileInfo::IS_SCRIPT) {
+						_script_class_info_update(ia.file, ia.path, &ia.file->class_info);
+					}
 				}
 			} break;
 			default: {
@@ -1429,7 +1434,7 @@ void EditorFileSystem::_script_class_info_update(EditorFileInfo *p_file, const S
 	ScriptClassInfo &sci = p_file->class_info;
 
 	// Clear old class info.
-	if (!sci.name.is_empty() && !sci.lang.is_empty() && (!p_sci || sci.name != p_sci->name || p_sci->lang.is_empty())) {
+	if (&sci != p_sci && !sci.name.is_empty() && !sci.lang.is_empty() && (!p_sci || sci.name != p_sci->name || p_sci->lang.is_empty())) {
 		HashMap<StringName, ScriptClassAlternatives>::Iterator E = global_script_class_alternatives.find(sci.name);
 		if (E) {
 			ScriptClassAlternatives &scas = E->value;
@@ -1476,17 +1481,30 @@ void EditorFileSystem::_script_class_info_update(EditorFileInfo *p_file, const S
 		return; // No need to add class info.
 	}
 
-	bool updat_cache = true;
+	bool updat_cache = false;
 	HashMap<StringName, ScriptClassAlternatives>::Iterator E = global_script_class_alternatives.find(p_sci->name);
 	if (E) {
-		if (p_sci->icon_path != sci.icon_path) {
-			p_file->status |= EditorFileInfo::ICON_UPDATE;
+		if (&sci == p_sci) {
+			if (E->value.active_path != p_path) {
+				return;
+			}
+			// Just update the UID.
+			E->value.active_uid = p_file->uid;
+			ScriptServer::add_global_class(sci.name, sci.extends, sci.lang, p_path, sci.is_abstract, sci.is_tool, p_file->uid);
+			return;
 		}
 		sci = *p_sci;
 		// Check whether the activated alternative info needs to be updated.
-		updat_cache = E->value.active_uid == p_file->uid && E->value.active_path == p_path;
+		if (E->value.active_uid != p_file->uid || E->value.active_path != p_path) {
+			return;
+		}
+		updat_cache = true;
+		if (p_sci->icon_path != sci.icon_path) {
+			p_file->status |= EditorFileInfo::ICON_UPDATE;
+		}
 	} else {
 		sci = *p_sci;
+		updat_cache = true;
 
 		ScriptClassAlternatives &scas = global_script_class_alternatives[sci.name];
 		scas.alternatives[p_path] = p_file;
