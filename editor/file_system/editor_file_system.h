@@ -196,7 +196,7 @@ class EditorFileSystem : public Node {
 			ACTION_FILE_ADD,
 			ACTION_FILE_REMOVE,
 			ACTION_FILE_UPDATE,
-			ACTION_FILE_TEST_REIMPORT,
+			ACTION_FILE_REIMPORT,
 			ACTION_FILE_RELOAD,
 			ACTION_UID_ADD,
 			ACTION_UID_REMOVE,
@@ -360,8 +360,8 @@ class EditorFileSystem : public Node {
 	Error _reimport_file(const String &p_file, const HashMap<StringName, Variant> &p_custom_options = HashMap<StringName, Variant>(), const String &p_custom_importer = String(), Variant *generator_parameters = nullptr, bool p_update_file_system = true);
 	Error _reimport_group(const String &p_group_file, const Vector<String> &p_files);
 
-	bool _test_for_reimport(const String &p_path, const String &p_expected_import_md5);
-	bool _is_test_for_reimport_needed(EditorFileInfo *p_file, const String &p_path, uint64_t p_modification_time, uint64_t p_internal_modification_time);
+	bool _test_for_reimport(const String &p_path, EditorFileInfo *p_file);
+	bool _is_test_for_reimport_needed(EditorFileInfo *p_file, uint64_t p_modification_time, uint64_t p_internal_modification_time);
 	Vector<String> _get_import_dest_paths(const String &p_path);
 
 	bool reimport_on_missing_imported_files;
