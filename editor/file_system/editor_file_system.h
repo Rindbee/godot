@@ -82,7 +82,7 @@ class EditorFileSystemDirectory : public Object {
 			NONE = 0,
 			FILE_ADD = 1,
 			FILE_REMOVE = 1 << 1,
-			FILE_UPDATE = 1 << 2,
+			FILE_UPDATE = 1 << 2, // For files that are indeed updated, some properties of their FileInfo need to be updated.
 			FILE_CHANGED = FILE_ADD | FILE_REMOVE | FILE_UPDATE,
 			TYPE_ADD = 1 << 4,
 			TYPE_REMOVE = 1 << 5,

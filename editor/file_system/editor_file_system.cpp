@@ -1052,16 +1052,20 @@ bool EditorFileSystem::_update_scan_actions() {
 			} break;
 			case ItemAction::ACTION_FILE_REMOVE: {
 				ERR_CONTINUE(!ia.file);
-				// ia.file->status &= ~EditorFileInfo::TEMPORARY;
+				ia.file->status &= ~EditorFileInfo::TEMPORARY;
 				memdelete(ia.file);
 				fs_changed = true;
 			} break;
 			case ItemAction::ACTION_FILE_ADD:
 			case ItemAction::ACTION_FILE_UPDATE: {
 				ERR_CONTINUE(!ia.file);
+				ia.file->status &= ~EditorFileInfo::TEMPORARY;
 				fs_changed = true;
 			} break;
 			case ItemAction::ACTION_FILE_REIMPORT: {
+				if (ia.file) {
+					ia.file->status &= ~EditorFileInfo::TEMPORARY;
+				}
 				reimports.push_back(ia.path);
 			} break;
 			case ItemAction::ACTION_UID_ADD: {
@@ -1408,7 +1412,9 @@ void EditorFileSystem::_import_validate(EditorFileInfo *p_file, const String &p_
 	if (!FileAccess::exists(p_path + ".import")) {
 		// Import directly.
 		_create_action(nullptr, p_file, p_path, ItemAction::ACTION_FILE_REIMPORT);
-
+		if (!(p_file->status & EditorFileInfo::FILE_ADD)) {
+			_create_action(nullptr, p_file, p_path, ItemAction::ACTION_FILE_UPDATE);
+		}
 		const ResourceUID::ID old_uid = p_file->uid;
 		p_file->uid = ResourceUID::INVALID_ID;
 		_create_actions_from_uid_change(p_file, p_path, old_uid);
@@ -1423,6 +1429,9 @@ void EditorFileSystem::_import_validate(EditorFileInfo *p_file, const String &p_
 			const ResourceUID::ID old_uid = p_file->uid;
 			p_file->uid = ResourceLoader::get_resource_uid(p_path);
 			_create_actions_from_uid_change(p_file, p_path, old_uid);
+			if (!(p_file->status & EditorFileInfo::FILE_ADD)) {
+				_create_action(nullptr, p_file, p_path, ItemAction::ACTION_FILE_UPDATE);
+			}
 		}
 		return;
 	}
@@ -1430,7 +1439,9 @@ void EditorFileSystem::_import_validate(EditorFileInfo *p_file, const String &p_
 	if (need_reimport) {
 		// Must reimport.
 		_create_action(nullptr, p_file, p_path, ItemAction::ACTION_FILE_REIMPORT);
-
+		if (!(p_file->status & EditorFileInfo::FILE_ADD)) {
+			_create_action(nullptr, p_file, p_path, ItemAction::ACTION_FILE_UPDATE);
+		}
 		const ResourceUID::ID old_uid = p_file->uid;
 		p_file->uid = ResourceLoader::get_resource_uid(p_path);
 		_create_actions_from_uid_change(p_file, p_path, old_uid);
@@ -1454,6 +1465,9 @@ void EditorFileSystem::_import_validate(EditorFileInfo *p_file, const String &p_
 		const ResourceUID::ID old_uid = p_file->uid;
 		p_file->uid = ResourceLoader::get_resource_uid(p_path);
 		_create_actions_from_uid_change(p_file, p_path, old_uid);
+		if (!(p_file->status & EditorFileInfo::FILE_ADD)) {
+			_create_action(nullptr, p_file, p_path, ItemAction::ACTION_FILE_UPDATE);
+		}
 	}
 }
 
@@ -1573,6 +1587,8 @@ EditorFileSystemDirectory::FileInfo *EditorFileSystem::_file_info_add(EditorFile
 		p_dir->files.push_back(fi);
 	}
 	fi->status &= ~EditorFileInfo::IS_ORPHAN;
+	// fi->status |= EditorFileInfo::FILE_ADD;
+	_create_action(p_dir, fi, path, ItemAction::ACTION_FILE_ADD);
 
 	fi->file = p_file;
 	_category_validate(fi, path);
@@ -1611,6 +1627,9 @@ EditorFileSystemDirectory::FileInfo *EditorFileSystem::_file_info_add(EditorFile
 }
 
 void EditorFileSystem::_file_info_remove(EditorFileInfo *p_file, const String &p_path, const int p_idx) {
+	if (p_file->status & EditorFileInfo::FILE_REMOVE) {
+		return;
+	}
 	p_file->status |= EditorFileInfo::FILE_REMOVE;
 	if (p_idx != -1) {
 		// Immediately remove it from the tree, but do not immediately release it.
@@ -1629,6 +1648,12 @@ void EditorFileSystem::_file_info_remove(EditorFileInfo *p_file, const String &p
 }
 
 void EditorFileSystem::_file_info_update(EditorFileInfo *p_file, const String &p_path) {
+	// There is only one state for a file in the same frame.
+	// Files that have already been marked will not be marked again.
+	if (p_file->status & EditorFileInfo::FILE_CHANGED) {
+		return;
+	}
+
 	const uint32_t old_status = p_file->status;
 	if (scanning_settings_changed && !first_scan) {
 		_category_validate(p_file, p_path);
@@ -1670,6 +1695,7 @@ void EditorFileSystem::_file_info_update(EditorFileInfo *p_file, const String &p
 			// The UID is not changed, but prevents invalidation of the UID cache on editor startup.
 			if (first_scan && !(p_file->status & EditorFileInfo::IS_SCRIPT)) {
 				_create_actions_from_uid_change(p_file, p_path, p_file->uid);
+				_create_action(nullptr, p_file, p_path, ItemAction::ACTION_FILE_UPDATE);
 			}
 			return;
 		}
@@ -1680,6 +1706,7 @@ void EditorFileSystem::_file_info_update(EditorFileInfo *p_file, const String &p
 			const ResourceUID::ID old_uid = p_file->uid;
 			p_file->uid = internal_mt == 0 ? ResourceUID::INVALID_ID : ResourceLoader::get_resource_uid(p_path);
 			_create_actions_from_uid_change(p_file, p_path, old_uid);
+			_create_action(nullptr, p_file, p_path, ItemAction::ACTION_FILE_UPDATE);
 		}
 		return;
 	}
@@ -1801,9 +1828,6 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 
 		for (int i = 0; i < p_dir->files.size(); i++) {
 			p_dir->files[i]->verified = false;
-			if (!first_scan) {
-				p_dir->files[i]->status &= ~EditorFileInfo::TEMPORARY;
-			}
 		}
 
 		for (int i = 0; i < p_dir->subdirs.size(); i++) {
@@ -1899,7 +1923,6 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 					diff_nb_files++;
 				} else {
 					p_dir->files[idx]->verified = true;
-					p_dir->files[idx]->status |= EditorFileInfo::FILE_UPDATE;
 				}
 			}
 		}
@@ -3465,8 +3488,8 @@ void EditorFileSystem::_refresh_filesystem() {
 	if (dirty_directories.is_empty()) {
 		// Avoid calling _update_scan_actions() repeatedly.
 		_update_scan_actions();
-		emit_signal(SNAME("filesystem_changed"));
 	}
+	emit_signal(SNAME("filesystem_changed"));
 
 	refresh_queued = false;
 }
