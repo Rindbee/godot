@@ -1092,7 +1092,8 @@ bool EditorFileSystem::_update_scan_actions() {
 				}
 			} break;
 			case ItemAction::ACTION_UID_ADD: {
-				print_line(vformat("[Add] old uid: %s, uid: %s, path: %s.",
+				print_line(vformat("[%.6f] [ADD UID] old uid: %s, uid: %s, path: %s.",
+						OS::get_singleton()->get_ticks_usec() / 1000000.0f,
 						ResourceUID::get_singleton()->id_to_text(ia.old_uid),
 						ResourceUID::get_singleton()->id_to_text(ia.file->uid),
 						ia.path));
@@ -1133,7 +1134,8 @@ bool EditorFileSystem::_update_scan_actions() {
 				}
 			} break;
 			case ItemAction::ACTION_UID_REMOVE: {
-				print_line(vformat("[Remove] old uid: %s, uid: %s, path: %s.",
+				print_line(vformat("[%.6f] [REMOVE UID] old uid: %s, uid: %s, path: %s.",
+						OS::get_singleton()->get_ticks_usec() / 1000000.0f,
 						ResourceUID::get_singleton()->id_to_text(ia.old_uid),
 						ResourceUID::get_singleton()->id_to_text(ia.file->uid),
 						ia.path));
@@ -1142,7 +1144,8 @@ bool EditorFileSystem::_update_scan_actions() {
 				}
 			} break;
 			case ItemAction::ACTION_UID_PENDING_ADD: {
-				print_line(vformat("[Pending add] old uid: %s, uid: %s, path: %s.",
+				print_line(vformat("[%.6f] [TEST ADD UID] old uid: %s, uid: %s, path: %s.",
+						OS::get_singleton()->get_ticks_usec() / 1000000.0f,
 						ResourceUID::get_singleton()->id_to_text(ia.old_uid),
 						ResourceUID::get_singleton()->id_to_text(ia.file->uid),
 						ia.path));
