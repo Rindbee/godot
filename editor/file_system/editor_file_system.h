@@ -239,7 +239,7 @@ class EditorFileSystem : public Node {
 	EditorFileSystemDirectory *new_filesystem = nullptr;
 	static ScannedDirectory *first_scan_root_dir;
 
-	bool filesystem_changed_queued = false;
+	bool update_actions_queued = false;
 	bool scanning = false;
 	bool importing = false;
 	bool first_scan = true;
@@ -256,13 +256,12 @@ class EditorFileSystem : public Node {
 	void _import_validate(EditorFileInfo *p_file, const String &p_path);
 	void _script_class_info_update(EditorFileInfo *p_file, const String &p_path, const ScriptClassInfo *p_sci);
 
-	EditorFileInfo *_file_info_add(EditorFileSystemDirectory *p_parent_dir, const String &p_parent_path, const String &p_file, bool p_insert);
+	void _file_info_add(EditorFileSystemDirectory *p_parent_dir, const String &p_parent_path, const String &p_file, bool p_insert);
 	void _file_info_remove(EditorFileInfo *p_file, const String &p_path, const int p_idx);
 	void _file_info_update(EditorFileInfo *p_file, const String &p_path);
 
 	int _dir_info_remove(EditorFileSystemDirectory *p_dir, const String &p_path, const int p_idx);
 
-	void _notify_filesystem_changed();
 	void _scan_filesystem();
 	void _first_scan_filesystem();
 	void _first_scan_process_scripts(const ScannedDirectory *p_scan_dir, List<String> &p_gdextension_extensions, HashSet<String> &p_existing_class_names, HashSet<String> &p_extensions);
@@ -347,6 +346,7 @@ class EditorFileSystem : public Node {
 	void _create_action(EditorFileSystemDirectory *p_dir, EditorFileInfo *p_fi, const String &p_path, const ItemAction::Action p_action, const ItemAction::Step p_step = ItemAction::STEP_NORMAL, const ResourceUID::ID p_old_uid = ResourceUID::INVALID_ID);
 	void _create_actions_from_uid_change(EditorFileInfo *p_fi, const String &p_path, const ResourceUID::ID p_old_uid = ResourceUID::INVALID_ID);
 
+	bool updating_scan_actions = false;
 	bool _update_scan_actions();
 
 	Error _reimport_file(const String &p_file, const HashMap<StringName, Variant> &p_custom_options = HashMap<StringName, Variant>(), const String &p_custom_importer = String(), Variant *generator_parameters = nullptr, bool p_update_file_system = true);

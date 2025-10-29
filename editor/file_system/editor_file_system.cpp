@@ -1028,6 +1028,7 @@ bool EditorFileSystem::_update_scan_actions() {
 	bool fs_changed = false;
 
 	Vector<String> reimports;
+	Vector<String> overwrites;
 	Vector<String> reloads;
 
 	EditorProgress *ep = nullptr;
@@ -1059,6 +1060,13 @@ bool EditorFileSystem::_update_scan_actions() {
 			case ItemAction::ACTION_FILE_ADD:
 			case ItemAction::ACTION_FILE_UPDATE: {
 				ERR_CONTINUE(!ia.file);
+
+				if ((ia.file->status & EditorFileInfo::TYPE_CHANGED) == EditorFileInfo::TYPE_CHANGED) {
+					overwrites.push_back(ia.path);
+				} else if (!(ia.file->status & EditorFileInfo::IS_IMPORTABLE)) {
+					reloads.push_back(ia.path);
+				}
+
 				ia.file->status &= ~EditorFileInfo::TEMPORARY;
 				fs_changed = true;
 			} break;
@@ -1182,11 +1190,6 @@ bool EditorFileSystem::_update_scan_actions() {
 		ResourceUID::get_singleton()->update_cache();
 	}
 
-	if (!reloads.is_empty()) {
-		// Update global class names, dependencies, etc...
-		update_files(reloads);
-	}
-
 	if (first_scan) {
 		//only on first scan this is valid and updated, then settings changed.
 		revalidate_import_files = false;
@@ -1200,6 +1203,14 @@ bool EditorFileSystem::_update_scan_actions() {
 	// Moving the processing of pending updates before the resources_reload event to be sure all global class names
 	// are updated. Script.cpp listens on resources_reload and reloads updated scripts.
 	_process_update_pending();
+
+	for (const String &path : overwrites) {
+		Ref<Resource> res = ResourceCache::get_ref(path);
+		if (res.is_null()) {
+			continue;
+		}
+		res->set_path("");
+	}
 
 	if (reloads.size()) {
 		emit_signal(SNAME("resources_reload"), reloads);
@@ -1565,7 +1576,7 @@ void EditorFileSystem::_script_class_info_update(EditorFileInfo *p_file, const S
 	}
 }
 
-EditorFileSystemDirectory::FileInfo *EditorFileSystem::_file_info_add(EditorFileSystemDirectory *p_dir, const String &p_dir_path, const String &p_file, bool p_insert) {
+void EditorFileSystem::_file_info_add(EditorFileSystemDirectory *p_dir, const String &p_dir_path, const String &p_file, bool p_insert) {
 	const String path = p_dir_path.path_join(p_file);
 	const bool is_reused = first_scan && script_file_info.has(path);
 
@@ -1595,7 +1606,7 @@ EditorFileSystemDirectory::FileInfo *EditorFileSystem::_file_info_add(EditorFile
 
 	if (fi->status & EditorFileSystemDirectory::FileInfo::IS_IMPORTABLE) {
 		_import_validate(fi, path);
-		return fi;
+		return;
 	}
 
 	if (is_reused) {
@@ -1623,7 +1634,8 @@ EditorFileSystemDirectory::FileInfo *EditorFileSystem::_file_info_add(EditorFile
 
 	_create_actions_from_uid_change(fi, path, fi->uid);
 
-	return fi;
+	// Update preview
+	EditorResourcePreview::get_singleton()->check_for_invalidation(path);
 }
 
 void EditorFileSystem::_file_info_remove(EditorFileInfo *p_file, const String &p_path, const int p_idx) {
@@ -1746,10 +1758,8 @@ void EditorFileSystem::_file_info_update(EditorFileInfo *p_file, const String &p
 	if (ClassDB::is_parent_class(p_file->type, Resource::get_class_static())) {
 		// files_to_update_icon_path.push_back(p_file);
 	}
-	{
-		// Update preview
-		EditorResourcePreview::get_singleton()->check_for_invalidation(p_path);
-	}
+	// Update preview
+	EditorResourcePreview::get_singleton()->check_for_invalidation(p_path);
 }
 
 int EditorFileSystem::_dir_info_remove(EditorFileSystemDirectory *p_dir, const String &p_path, const int p_idx) {
@@ -1930,7 +1940,7 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 		da->list_dir_end();
 	}
 
-	for (int i = 0; i < p_dir->files.size(); i++) {
+	for (int i = p_dir->files.size() - 1; i >= 0; i--) {
 		EditorFileInfo *fi = p_dir->files[i];
 		const String path = cd.path_join(fi->file);
 
@@ -1948,7 +1958,7 @@ void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanPr
 		p_progress.increment();
 	}
 
-	for (int i = 0; i < p_dir->subdirs.size(); i++) {
+	for (int i = p_dir->subdirs.size() - 1; i >= 0; i--) {
 		EditorFileSystemDirectory *sub_dir = p_dir->subdirs[i];
 		const String sub_dir_path = cd.path_join(sub_dir->name);
 		if ((updated_dir && !sub_dir->verified) || _should_skip_directory(sub_dir_path)) {
@@ -2004,6 +2014,7 @@ void EditorFileSystem::_delete_internal_files(const String &p_file) {
 		Ref<DirAccess> da = DirAccess::create(DirAccess::ACCESS_RESOURCES);
 		for (const String &E : paths) {
 			da->remove(E);
+			da->remove(E.get_basename() + ".md5");
 		}
 		da->remove(p_file + ".import");
 	}
@@ -2067,7 +2078,7 @@ void EditorFileSystem::_scan_dirs_changes(bool p_full_scan) {
 	}
 
 	if (first_scan || // Prevent a premature changes scan from inhibiting the first full scan
-			scanning || scanning_changes || thread.is_started()) {
+			scanning || scanning_changes || thread.is_started() || updating_scan_actions) {
 		scan_changes_pending = true;
 		set_process(true);
 		return;
@@ -2163,7 +2174,7 @@ void EditorFileSystem::_notification(int p_what) {
 						emit_signal(SNAME("filesystem_changed"));
 					}
 					emit_signal(SNAME("sources_changed"), sources_changed.size() > 0);
-
+					update_actions_queued = false;
 				} else if (scanning && scanning_done.is_set()) {
 					set_process(false);
 
@@ -2182,15 +2193,26 @@ void EditorFileSystem::_notification(int p_what) {
 					ResourceImporter::load_on_startup = nullptr;
 					emit_signal(SNAME("filesystem_changed"));
 					emit_signal(SNAME("sources_changed"), sources_changed.size() > 0);
+					update_actions_queued = false;
 				}
 
 				prevent_recursive_process_hack = false;
 			}
 
-			if (!first_scan && !scanning && !scanning_changes && scan_changes_pending) {
+			if (!is_scanning() && scan_changes_pending) {
 				set_process(false);
 				scan_changes_pending = false;
 				_scan_dirs_changes(false);
+			}
+
+			if (!is_scanning() && update_actions_queued) {
+				set_process(false);
+				_update_global_script_class_activation();
+				updating_scan_actions = true;
+				if (_update_scan_actions()) {
+					emit_signal(SNAME("filesystem_changed"));
+				}
+				updating_scan_actions = false;
 			}
 		} break;
 	}
@@ -2754,10 +2776,6 @@ void EditorFileSystem::update_file(const String &p_file) {
 
 void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 	bool updated = false;
-	bool update_files_icon_cache = false;
-	Vector<String> overwrites;
-	Vector<String> reloads;
-	Vector<EditorFileInfo *> files_to_update_icon_path;
 	for (const String &file : p_script_paths) {
 		ERR_CONTINUE(file.is_empty());
 		EditorFileSystemDirectory *fs = nullptr;
@@ -2778,58 +2796,20 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 				updated = true;
 			}
 		} else {
-			EditorFileInfo *fi;
-
 			if (cpos == -1) {
 				// The file did not exist, it was added.
-				fi = _file_info_add(fs, file.get_base_dir(), file.get_file(), true);
+				_file_info_add(fs, file.get_base_dir(), file.get_file(), true);
 			} else {
-				fi = fs->files[cpos];
-				_file_info_update(fi, file);
+				_file_info_update(fs->files[cpos], file);
 			}
-
-			if ((fi->status & EditorFileInfo::TYPE_CHANGED) == EditorFileInfo::TYPE_CHANGED) {
-				overwrites.push_back(file);
-			}
-			if (!(fi->status & EditorFileInfo::IS_IMPORTABLE)) {
-				reloads.push_back(file);
-			}
-			// Update preview
-			EditorResourcePreview::get_singleton()->check_for_invalidation(file);
 			updated = true;
 		}
 	}
-
-	if (updated) {
-		if (update_files_icon_cache) {
-			_update_files_icon_path();
-		} else {
-			for (EditorFileInfo *fi : files_to_update_icon_path) {
-				_update_file_icon_path(fi);
-			}
-		}
-		if (!is_scanning()) {
-			_process_update_pending();
-			if (!reloads.is_empty()) {
-				emit_signal(SNAME("resources_reload"), reloads);
-			}
-		}
-		for (const String &path : overwrites) {
-			Ref<Resource> res = ResourceCache::get_ref(path);
-			if (res.is_valid()) {
-				res->set_path("");
-			}
-		}
-		if (!filesystem_changed_queued) {
-			filesystem_changed_queued = true;
-			callable_mp(this, &EditorFileSystem::_notify_filesystem_changed).call_deferred();
-		}
+	if (!updated || is_scanning() || update_actions_queued) {
+		return;
 	}
-}
-
-void EditorFileSystem::_notify_filesystem_changed() {
-	emit_signal("filesystem_changed");
-	filesystem_changed_queued = false;
+	set_process(true);
+	update_actions_queued = true;
 }
 
 HashSet<String> EditorFileSystem::get_valid_extensions() const {
