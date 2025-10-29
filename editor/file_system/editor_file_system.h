@@ -242,7 +242,7 @@ class EditorFileSystem : public Node {
 	EditorFileSystemDirectory *new_filesystem = nullptr;
 	static ScannedDirectory *first_scan_root_dir;
 
-	bool filesystem_changed_queued = false;
+	bool update_actions_queued = false;
 	bool scanning = false;
 	bool importing = false;
 	bool first_scan = true;
@@ -260,13 +260,12 @@ class EditorFileSystem : public Node {
 	void _import_validate(EditorFileInfo *p_file, const String &p_path);
 	void _script_class_info_update(EditorFileInfo *p_file, const String &p_path, const ScriptClassInfo *p_sci);
 
-	EditorFileInfo *_file_info_add(EditorFileSystemDirectory *p_parent_dir, const String &p_parent_path, const String &p_file, bool p_insert);
+	void _file_info_add(EditorFileSystemDirectory *p_parent_dir, const String &p_parent_path, const String &p_file, bool p_insert);
 	void _file_info_remove(EditorFileInfo *p_file, const String &p_path, const int p_idx);
 	void _file_info_update(EditorFileInfo *p_file, const String &p_path);
 
 	int _dir_info_remove(EditorFileSystemDirectory *p_dir, const String &p_path, const int p_idx);
 
-	void _notify_filesystem_changed();
 	void _scan_filesystem();
 	void _first_scan_filesystem();
 	void _first_scan_process_scripts(const ScannedDirectory *p_scan_dir, List<String> &p_gdextension_extensions, HashSet<String> &p_existing_class_names, HashSet<String> &p_extensions);
