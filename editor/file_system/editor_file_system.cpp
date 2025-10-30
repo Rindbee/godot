@@ -1053,20 +1053,27 @@ bool EditorFileSystem::_update_scan_actions() {
 			} break;
 			case ItemAction::ACTION_FILE_REMOVE: {
 				ERR_CONTINUE(!ia.file);
+				if (ia.file->status & EditorFileInfo::TYPE_REMOVE) {
+					overwrites.push_back(ia.path);
+				}
 				ia.file->status &= ~EditorFileInfo::TEMPORARY;
 				memdelete(ia.file);
 				fs_changed = true;
 			} break;
-			case ItemAction::ACTION_FILE_ADD:
+			case ItemAction::ACTION_FILE_ADD: {
+				ERR_CONTINUE(!ia.file);
+				ia.file->status &= ~EditorFileInfo::TEMPORARY;
+				fs_changed = true;
+			} break;
 			case ItemAction::ACTION_FILE_UPDATE: {
 				ERR_CONTINUE(!ia.file);
-
-				if ((ia.file->status & EditorFileInfo::TYPE_CHANGED) == EditorFileInfo::TYPE_CHANGED) {
-					overwrites.push_back(ia.path);
-				} else if (!(ia.file->status & EditorFileInfo::IS_IMPORTABLE)) {
-					reloads.push_back(ia.path);
+				if (!(ia.file->status & EditorFileInfo::IS_IMPORTABLE)) {
+					if (ia.file->status & EditorFileInfo::TYPE_REMOVE) {
+						overwrites.push_back(ia.path);
+					} else if (!(ia.file->status & EditorFileInfo::TYPE_CHANGED)) {
+						reloads.push_back(ia.path);
+					}
 				}
-
 				ia.file->status &= ~EditorFileInfo::TEMPORARY;
 				fs_changed = true;
 			} break;
@@ -1642,7 +1649,7 @@ void EditorFileSystem::_file_info_remove(EditorFileInfo *p_file, const String &p
 	if (p_file->status & EditorFileInfo::FILE_REMOVE) {
 		return;
 	}
-	p_file->status |= EditorFileInfo::FILE_REMOVE;
+	p_file->status |= EditorFileInfo::FILE_REMOVE | EditorFileInfo::TYPE_REMOVE;
 	if (p_idx != -1) {
 		// Immediately remove it from the tree, but do not immediately release it.
 		p_file->parent->files.remove_at(p_idx);
