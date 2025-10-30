@@ -603,7 +603,7 @@ bool EditorFileSystem::_mark_dirty_dirs_from_cache() {
 
 void EditorFileSystem::_scan_filesystem() {
 	// On the first scan, the first_scan_root_dir is created in _first_scan_filesystem.
-	ERR_FAIL_COND(!scanning || new_filesystem || (first_scan && !first_scan_root_dir));
+	ERR_FAIL_COND(!scanning || (first_scan && !first_scan_root_dir));
 
 	bool loaded = !first_scan || _load_filesystem_from_cache();
 
@@ -628,9 +628,6 @@ void EditorFileSystem::_scan_filesystem() {
 	if (first_scan) {
 		memdelete(first_scan_root_dir);
 		first_scan_root_dir = nullptr;
-	} else {
-		//on the first scan this is done from the main thread after re-importing
-		_save_filesystem_cache();
 	}
 }
 
@@ -1289,8 +1286,6 @@ void EditorFileSystem::scan() {
 	if (!use_threads) {
 		_scan_filesystem();
 		scanning_done.set();
-		//file_type_cache.clear();
-		new_filesystem = nullptr;
 		dirty_directories.clear();
 		scan_changes_pending = false;
 		_update_scan_actions();
@@ -1830,20 +1825,6 @@ void EditorFileSystem::_process_file_system(const ScannedDirectory *p_scan_dir, 
 	}
 }
 
-void EditorFileSystem::_process_removed_files(const HashSet<String> &p_processed_files) {
-	for (const KeyValue<String, EditorFileSystem::FileCache> &kv : file_cache) {
-		if (!p_processed_files.has(kv.key)) {
-			if (ClassDB::is_parent_class(kv.value.type, Script::get_class_static()) || ClassDB::is_parent_class(kv.value.type, PackedScene::get_class_static())) {
-				// A script has been removed from disk since the last startup. The documentation needs to be updated.
-				// There's no need to add the path in update_script_paths since that is exclusively for updating global class names,
-				// which is handled in _first_scan_filesystem before the full scan to ensure plugins and autoloads can be created.
-				MutexLock update_script_lock(update_script_mutex);
-				update_script_paths_documentation.insert(kv.key);
-			}
-		}
-	}
-}
-
 void EditorFileSystem::_scan_fs_changes(EditorFileSystemDirectory *p_dir, ScanProgress &p_progress, bool p_recursive) {
 	p_recursive |= p_dir->recursive;
 	p_dir->dirty = false;
@@ -2155,13 +2136,6 @@ void EditorFileSystem::_notification(int p_what) {
 				set_process(false);
 			}
 
-			if (filesystem) {
-				memdelete(filesystem);
-			}
-			if (new_filesystem) {
-				memdelete(new_filesystem);
-			}
-			new_filesystem = nullptr;
 			dirty_directories.clear();
 			scan_changes_pending = false;
 		} break;
@@ -2202,7 +2176,6 @@ void EditorFileSystem::_notification(int p_what) {
 				} else if (scanning && scanning_done.is_set()) {
 					set_process(false);
 
-					new_filesystem = nullptr;
 					dirty_directories.clear();
 					scan_changes_pending = false;
 					thread.wait_to_finish();
@@ -2724,13 +2697,6 @@ void EditorFileSystem::_process_update_pending() {
 		_update_script_documentation();
 		_update_pending_scene_groups();
 	}
-}
-
-void EditorFileSystem::_queue_update_script_class(const String &p_path, const ScriptClassInfoUpdate &p_script_update) {
-	MutexLock update_script_lock(update_script_mutex);
-
-	update_script_paths.insert(p_path, p_script_update);
-	update_script_paths_documentation.insert(p_path);
 }
 
 void EditorFileSystem::_update_scene_groups() {
@@ -4064,8 +4030,6 @@ EditorFileSystem::EditorFileSystem() {
 	singleton = this;
 	filesystem = memnew(EditorFileSystemDirectory); //like, empty
 	filesystem->parent = nullptr;
-
-	new_filesystem = nullptr;
 
 	// This should probably also work on Unix and use the string it returns for FAT32 or exFAT
 	Ref<DirAccess> da = DirAccess::create(DirAccess::ACCESS_RESOURCES);

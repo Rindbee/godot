@@ -239,7 +239,6 @@ class EditorFileSystem : public Node {
 	Thread thread;
 	static void _thread_func(void *_userdata);
 
-	EditorFileSystemDirectory *new_filesystem = nullptr;
 	static ScannedDirectory *first_scan_root_dir;
 
 	bool update_actions_queued = false;
@@ -282,22 +281,6 @@ class EditorFileSystem : public Node {
 
 	static EditorFileSystem *singleton;
 
-	/* Used for reading the filesystem cache file */
-	struct FileCache {
-		StringName type;
-		String resource_script_class;
-		ResourceUID::ID uid = ResourceUID::INVALID_ID;
-		uint64_t modification_time = 0;
-		uint64_t import_modification_time = 0;
-		String import_md5;
-		Vector<String> import_dest_paths;
-		Vector<String> deps;
-		bool import_valid = false;
-		String import_group_file;
-		ScriptClassInfo class_info;
-	};
-
-	HashMap<String, FileCache> file_cache;
 	HashSet<String> dep_update_list;
 
 	struct ScanProgress {
@@ -407,11 +390,9 @@ class EditorFileSystem : public Node {
 	Mutex update_script_mutex;
 	HashMap<String, ScriptClassInfoUpdate> update_script_paths;
 	HashSet<String> update_script_paths_documentation;
-	void _queue_update_script_class(const String &p_path, const ScriptClassInfoUpdate &p_script_update);
 	void _update_script_classes();
 	void _update_script_documentation();
 	void _process_update_pending();
-	void _process_removed_files(const HashSet<String> &p_processed_files);
 	bool _should_reload_script(const String &p_path);
 
 	Mutex update_scene_mutex;
