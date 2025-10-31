@@ -87,12 +87,7 @@ class EditorFileSystemDirectory : public Object {
 			TYPE_ADD = 1 << 4,
 			TYPE_REMOVE = 1 << 5,
 			TYPE_CHANGED = TYPE_ADD | TYPE_REMOVE,
-			ICON_ADD = 1 << 8,
-			ICON_REMOVE = 1 << 9,
-			ICON_UPDATE = 1 << 10,
-			ICON_OVERWRITE = ICON_ADD | ICON_REMOVE,
-			ICON_CHANGED = ICON_ADD | ICON_REMOVE | ICON_UPDATE,
-			TEMPORARY = FILE_CHANGED | TYPE_CHANGED | ICON_CHANGED,
+			TEMPORARY = FILE_CHANGED | TYPE_CHANGED,
 
 			IS_ORPHAN = 1 << 12,
 			HAS_CUSTOM_UID_SUPPORT = 1 << 13,
@@ -100,6 +95,9 @@ class EditorFileSystemDirectory : public Object {
 			IS_SCRIPT = 1 << 16,
 			IS_PACKEDSCENE = 1 << 17,
 			SPECIAL_TYPE = IS_SCRIPT | IS_PACKEDSCENE,
+			IS_GLOBAL_CLASS_ALTERNATIVE = 1 << 18,
+			IS_ACTIVE_GLOBAL_CLASS_ALTERNATIVE = 1 << 19,
+			GLOBAL_CLASS_MASK = IS_GLOBAL_CLASS_ALTERNATIVE | IS_ACTIVE_GLOBAL_CLASS_ALTERNATIVE,
 
 			AS_RESOURCE = 1 << 28,
 			IS_IMPORTABLE = 1 << 29,
@@ -253,6 +251,8 @@ class EditorFileSystem : public Node {
 	void _category_validate(EditorFileInfo *p_file, const String &p_path);
 	void _type_analysis(EditorFileInfo *p_file, const StringName &p_new_type);
 	void _import_validate(EditorFileInfo *p_file, const String &p_path);
+	void _global_script_class_info_remove(EditorFileInfo *p_file, const String &p_path);
+	void _global_script_class_info_add(EditorFileInfo *p_file, const String &p_path);
 	void _script_class_info_update(EditorFileInfo *p_file, const String &p_path, const ScriptClassInfo *p_sci);
 
 	void _file_info_add(EditorFileSystemDirectory *p_parent_dir, const String &p_parent_path, const String &p_file, bool p_insert);
@@ -375,14 +375,20 @@ class EditorFileSystem : public Node {
 	struct ScriptClassAlternatives {
 		bool active = false;
 		String active_path;
+		String icon_path;
 		ResourceUID::ID active_uid = ResourceUID::INVALID_ID;
 		HashMap<String, EditorFileInfo *> alternatives;
 	};
 	HashMap<StringName, ScriptClassAlternatives> global_script_class_alternatives;
 	void _update_global_script_class_activation();
 
+	bool script_classes_updated = false;
+	bool loader_changed = false;
+	bool saver_changed = false;
+	void _check_loader_or_saver_changed(const ScriptClassInfo &p_class_info);
+	bool _reload_loader_or_saver();
+
 	Mutex update_script_mutex;
-	HashMap<String, ScriptClassInfoUpdate> update_script_paths;
 	HashSet<String> update_script_paths_documentation;
 	void _update_script_classes();
 	void _update_script_documentation();

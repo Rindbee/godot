@@ -300,10 +300,17 @@ void EditorFileSystem::_scan_for_uid_directory(const ScannedDirectory *p_scan_di
 void EditorFileSystem::_update_global_script_class_activation() {
 	for (KeyValue<StringName, ScriptClassAlternatives> &E : global_script_class_alternatives) {
 		ScriptClassAlternatives &scas = E.value;
+		if (scas.alternatives.is_empty()) {
+			script_classes_updated = true;
+			global_script_class_alternatives.erase(E.key);
+			EditorNode::get_editor_data().script_class_clear_icon_path(E.key);
+			continue;
+		}
 		if (!first_scan && scas.active) {
 			continue;
 		}
 		if (!scas.active) {
+			script_classes_updated = true;
 			if (scas.active_uid != ResourceUID::INVALID_ID) {
 				for (KeyValue<String, EditorFileInfo *> &F : scas.alternatives) {
 					if (F.value->uid == scas.active_uid) { // Think of it as a file move.
@@ -323,17 +330,19 @@ void EditorFileSystem::_update_global_script_class_activation() {
 				}
 			}
 		}
-		const EditorFileInfo *fi = scas.alternatives[scas.active_path];
+		EditorFileInfo *fi = scas.alternatives[scas.active_path];
 		ERR_CONTINUE(fi == nullptr);
+		fi->status |= EditorFileInfo::IS_ACTIVE_GLOBAL_CLASS_ALTERNATIVE;
+		_check_loader_or_saver_changed(fi->class_info);
 		ScriptServer::add_global_class(fi->class_info.name, fi->class_info.extends, fi->class_info.lang, scas.active_path, fi->class_info.is_abstract, fi->class_info.is_tool, fi->uid);
 		EditorNode::get_editor_data().script_class_set_icon_path(fi->class_info.name, fi->class_info.icon_path);
 		EditorNode::get_editor_data().script_class_set_name(scas.active_path, fi->class_info.name);
-
 		{
 			MutexLock update_script_lock(update_script_mutex);
 			update_script_paths_documentation.insert(scas.active_path);
 		}
 	}
+	_reload_loader_or_saver();
 }
 
 void EditorFileSystem::_first_scan_filesystem() {
@@ -425,7 +434,7 @@ void EditorFileSystem::_first_scan_process_scripts(const ScannedDirectory *p_sca
 					continue;
 				}
 				p_existing_class_names.insert(info.name);
-
+				fi->status |= EditorFileInfo::IS_GLOBAL_CLASS_ALTERNATIVE;
 				ScriptClassAlternatives &scas = global_script_class_alternatives[info.name];
 				scas.alternatives[path] = fi;
 
@@ -1017,6 +1026,7 @@ void EditorFileSystem::_create_actions_from_uid_change(EditorFileInfo *p_fi, con
 }
 
 bool EditorFileSystem::_update_scan_actions() {
+	update_actions_queued = false;
 	sources_changed.clear();
 
 	// We need to update the script global class names before the reimports to be sure that
@@ -1119,8 +1129,8 @@ bool EditorFileSystem::_update_scan_actions() {
 				fs_changed = true; // The timestamp has changed.
 				print_verbose(vformat("[ADD UID] %s, %s", ia.path, ResourceUID::get_singleton()->id_to_text(ia.file->uid)));
 				// Update class cache.
-				if (ia.file->status & EditorFileInfo::IS_SCRIPT) {
-					_script_class_info_update(ia.file, ia.path, &ia.file->class_info);
+				if (ia.file->status & EditorFileInfo::IS_ACTIVE_GLOBAL_CLASS_ALTERNATIVE) {
+					_global_script_class_info_add(ia.file, ia.path);
 				}
 			} break;
 			case ItemAction::ACTION_UID_REMOVE: {
@@ -1155,8 +1165,8 @@ bool EditorFileSystem::_update_scan_actions() {
 				} else {
 					ResourceUID::get_singleton()->add_id(ia.file->uid, ia.path);
 					// Update class cache.
-					if (ia.file->status & EditorFileInfo::IS_SCRIPT) {
-						_script_class_info_update(ia.file, ia.path, &ia.file->class_info);
+					if (ia.file->status & EditorFileInfo::IS_ACTIVE_GLOBAL_CLASS_ALTERNATIVE) {
+						_global_script_class_info_add(ia.file, ia.path);
 					}
 				}
 			} break;
@@ -1434,14 +1444,19 @@ void EditorFileSystem::_import_validate(EditorFileInfo *p_file, const String &p_
 		_create_actions_from_uid_change(p_file, p_path, old_uid);
 		return;
 	}
+
+	const ResourceUID::ID old_uid = p_file->uid;
+
+	StringName new_type;
+	ResourceFormatImporter::get_singleton()->get_resource_import_info(p_path, new_type, p_file->uid, p_file->import_group_file);
+	_type_analysis(p_file, new_type);
+
 	const uint64_t mt = FileAccess::get_modified_time(p_path);
 	const uint64_t import_mt = FileAccess::get_modified_time(p_path + ".import");
 	if (!_is_test_for_reimport_needed(p_file, mt, import_mt) &&
 			(!first_scan || !revalidate_import_files || ResourceFormatImporter::get_singleton()->are_import_settings_valid(p_path))) {
 		if (first_scan) {
 			// In case the uid cache has not been loaded yet.
-			const ResourceUID::ID old_uid = p_file->uid;
-			p_file->uid = ResourceLoader::get_resource_uid(p_path);
 			_create_actions_from_uid_change(p_file, p_path, old_uid);
 			if (!(p_file->status & EditorFileInfo::FILE_ADD)) {
 				_create_action(nullptr, p_file, p_path, ItemAction::ACTION_FILE_UPDATE);
@@ -1456,10 +1471,7 @@ void EditorFileSystem::_import_validate(EditorFileInfo *p_file, const String &p_
 		if (!(p_file->status & EditorFileInfo::FILE_ADD)) {
 			_create_action(nullptr, p_file, p_path, ItemAction::ACTION_FILE_UPDATE);
 		}
-		const ResourceUID::ID old_uid = p_file->uid;
-		p_file->uid = ResourceLoader::get_resource_uid(p_path);
 		_create_actions_from_uid_change(p_file, p_path, old_uid);
-
 		Vector<String> dependencies = _get_dependencies(p_path);
 		for (const String &dep : dependencies) {
 			const String &dependency_path = dep.contains("::") ? dep.get_slice("::", 0) : dep;
@@ -1476,8 +1488,6 @@ void EditorFileSystem::_import_validate(EditorFileInfo *p_file, const String &p_
 	p_file->internal_modified_time = import_mt;
 	p_file->import_dest_paths = _get_import_dest_paths(p_path);
 	if (first_scan) {
-		const ResourceUID::ID old_uid = p_file->uid;
-		p_file->uid = ResourceLoader::get_resource_uid(p_path);
 		_create_actions_from_uid_change(p_file, p_path, old_uid);
 		if (!(p_file->status & EditorFileInfo::FILE_ADD)) {
 			_create_action(nullptr, p_file, p_path, ItemAction::ACTION_FILE_UPDATE);
@@ -1485,98 +1495,78 @@ void EditorFileSystem::_import_validate(EditorFileInfo *p_file, const String &p_
 	}
 }
 
-void EditorFileSystem::_script_class_info_update(EditorFileInfo *p_file, const String &p_path, const ScriptClassInfo *p_sci) {
+void EditorFileSystem::_check_loader_or_saver_changed(const ScriptClassInfo &p_class_info) {
+	if (p_class_info.extends == ResourceFormatLoader::get_class_static()) {
+		loader_changed = true;
+	} else if (p_class_info.extends == ResourceFormatSaver::get_class_static()) {
+		saver_changed = true;
+	}
+}
+
+bool EditorFileSystem::_reload_loader_or_saver() {
+	if (is_scanning()) {
+		return false;
+	}
+	if (saver_changed) {
+		saver_changed = false;
+		ResourceSaver::remove_custom_savers();
+		ResourceSaver::add_custom_savers();
+	}
+	if (loader_changed) {
+		loader_changed = false;
+		ResourceLoader::remove_custom_loaders();
+		ResourceLoader::add_custom_loaders();
+		update_extensions();
+		return true;
+	}
+	return false;
+}
+
+void EditorFileSystem::_global_script_class_info_remove(EditorFileInfo *p_file, const String &p_path) {
+	ERR_FAIL_NULL(p_file);
 	ScriptClassInfo &sci = p_file->class_info;
-
-	// Clear old class info.
-	if (&sci != p_sci && !sci.name.is_empty() && !sci.lang.is_empty() && (!p_sci || sci.name != p_sci->name || p_sci->lang.is_empty())) {
-		HashMap<StringName, ScriptClassAlternatives>::Iterator E = global_script_class_alternatives.find(sci.name);
-		if (E) {
-			ScriptClassAlternatives &scas = E->value;
-			scas.alternatives.erase(p_path);
-
-			if (scas.active && scas.active_uid == p_file->uid && scas.active_path == p_path) {
-				ScriptServer::remove_global_class(sci.name);
-				EditorHelp::remove_doc(sci.name);
-
-				if (scas.alternatives.is_empty()) {
-					global_script_class_alternatives.erase(sci.name);
-					EditorNode::get_editor_data().script_class_clear_icon_path(sci.name);
-					EditorNode::get_editor_data().script_class_clear_name(p_path);
-
-					if (!sci.icon_path.is_empty()) {
-						p_file->status |= EditorFileInfo::ICON_REMOVE;
-					}
-				} else {
-					scas.active_path = scas.alternatives.begin()->key;
-					scas.active_uid = scas.alternatives.begin()->value->uid;
-
-					EditorFileInfo *fi = scas.alternatives[scas.active_path];
-
-					ScriptServer::add_global_class(fi->class_info.name, fi->class_info.extends, fi->class_info.lang, scas.active_path, fi->class_info.is_abstract, fi->class_info.is_tool, fi->uid);
-					EditorNode::get_editor_data().script_class_set_icon_path(fi->class_info.name, fi->class_info.icon_path);
-					EditorNode::get_editor_data().script_class_set_name(scas.active_path, fi->class_info.name);
-
-					if (!fi->class_info.icon_path.is_empty()) {
-						fi->status |= EditorFileInfo::ICON_UPDATE;
-					}
-				}
-			}
-		} else {
-			ERR_PRINT(vformat("The file %s of the untracked global class %s was detected and removed.", p_path, sci.name));
-		}
+	HashMap<StringName, ScriptClassAlternatives>::Iterator E = global_script_class_alternatives.find(sci.name);
+	ERR_FAIL_NULL_MSG(E, vformat("The file %s of the untracked global class %s was detected and removed.", p_path, sci.name));
+	ScriptClassAlternatives &scas = E->value;
+	scas.alternatives.erase(p_path);
+	p_file->status &= ~EditorFileInfo::IS_GLOBAL_CLASS_ALTERNATIVE;
+	if (p_file->status & EditorFileInfo::IS_ACTIVE_GLOBAL_CLASS_ALTERNATIVE) {
+		p_file->status &= ~EditorFileInfo::IS_ACTIVE_GLOBAL_CLASS_ALTERNATIVE;
+		_check_loader_or_saver_changed(sci);
+		scas.active = false;
+		ScriptServer::remove_global_class(sci.name);
+		EditorHelp::remove_doc(sci.name);
+		EditorNode::get_editor_data().script_class_clear_name(p_path);
 	}
+}
 
-	if (!p_sci) {
-		return;
-	}
-
-	if (p_sci->name.is_empty() || p_sci->lang.is_empty()) {
-		sci = *p_sci;
-		return; // No need to add class info.
-	}
-
-	bool updat_cache = false;
-	HashMap<StringName, ScriptClassAlternatives>::Iterator E = global_script_class_alternatives.find(p_sci->name);
-	if (E) {
-		if (&sci == p_sci) {
-			if (E->value.active_path != p_path) {
-				return;
-			}
-			// Just update the UID.
-			E->value.active_uid = p_file->uid;
-			ScriptServer::add_global_class(sci.name, sci.extends, sci.lang, p_path, sci.is_abstract, sci.is_tool, p_file->uid);
-			return;
-		}
-		sci = *p_sci;
-		// Check whether the activated alternative info needs to be updated.
-		if (E->value.active_uid != p_file->uid || E->value.active_path != p_path) {
-			return;
-		}
-		updat_cache = true;
-		if (p_sci->icon_path != sci.icon_path) {
-			p_file->status |= EditorFileInfo::ICON_UPDATE;
-		}
-	} else {
-		sci = *p_sci;
-		updat_cache = true;
-
-		ScriptClassAlternatives &scas = global_script_class_alternatives[sci.name];
-		scas.alternatives[p_path] = p_file;
-		scas.active = true;
+void EditorFileSystem::_global_script_class_info_add(EditorFileInfo *p_file, const String &p_path) {
+	ERR_FAIL_NULL(p_file);
+	ScriptClassInfo &sci = p_file->class_info;
+	ScriptClassAlternatives &scas = global_script_class_alternatives[sci.name];
+	scas.alternatives[p_path] = p_file;
+	// Just update the UID.
+	if (p_file->status & EditorFileInfo::IS_ACTIVE_GLOBAL_CLASS_ALTERNATIVE) {
 		scas.active_uid = p_file->uid;
-		scas.active_path = p_path;
-
-		if (!sci.icon_path.is_empty()) {
-			p_file->status |= EditorFileInfo::ICON_ADD;
-		}
-	}
-
-	if (updat_cache) {
+		script_classes_updated = true;
+		_check_loader_or_saver_changed(sci);
 		ScriptServer::add_global_class(sci.name, sci.extends, sci.lang, p_path, sci.is_abstract, sci.is_tool, p_file->uid);
-		EditorNode::get_editor_data().script_class_set_icon_path(sci.name, sci.icon_path);
-		EditorNode::get_editor_data().script_class_set_name(p_path, sci.name);
 	}
+}
+
+void EditorFileSystem::_script_class_info_update(EditorFileInfo *p_file, const String &p_path, const ScriptClassInfo *p_sci) {
+	ERR_FAIL_NULL(p_file);
+	ERR_FAIL_NULL(p_sci);
+	ScriptClassInfo &sci = p_file->class_info;
+	if (p_file->status & EditorFileInfo::IS_GLOBAL_CLASS_ALTERNATIVE) {
+		_global_script_class_info_remove(p_file, p_path);
+	}
+	sci = *p_sci;
+	if (sci.name.is_empty() || sci.lang.is_empty()) {
+		return; // No need to add global class info.
+	}
+	p_file->status |= EditorFileInfo::IS_GLOBAL_CLASS_ALTERNATIVE;
+	_global_script_class_info_add(p_file, p_path);
 }
 
 void EditorFileSystem::_file_info_add(EditorFileSystemDirectory *p_dir, const String &p_dir_path, const String &p_file, bool p_insert) {
@@ -1657,8 +1647,8 @@ void EditorFileSystem::_file_info_remove(EditorFileInfo *p_file, const String &p
 
 	if (p_file->status & EditorFileInfo::IS_PACKEDSCENE) {
 		_queue_update_scene_groups(p_path);
-	} else if (p_file->status & EditorFileInfo::IS_SCRIPT) {
-		_script_class_info_update(p_file, p_path, nullptr);
+	} else if (p_file->status & EditorFileInfo::IS_GLOBAL_CLASS_ALTERNATIVE) {
+		_global_script_class_info_remove(p_file, p_path);
 	}
 }
 
@@ -1679,8 +1669,8 @@ void EditorFileSystem::_file_info_update(EditorFileInfo *p_file, const String &p
 		// if (old_status & EditorFileInfo::IS_PACKEDSCENE) {
 		// 	_queue_update_scene_groups(p_path);
 		// }
-		// if (old_status & EditorFileInfo::IS_SCRIPT) {
-		// 	_script_class_info_update(p_file, p_path, nullptr);
+		// if (old_status & EditorFileInfo::IS_GLOBAL_CLASS_ALTERNATIVE) {
+		// 	_global_script_class_info_remove(p_file, p_path);
 		// }
 
 		_import_validate(p_file, p_path);
@@ -2156,7 +2146,6 @@ void EditorFileSystem::_notification(int p_what) {
 						emit_signal(SNAME("filesystem_changed"));
 					}
 					emit_signal(SNAME("sources_changed"), sources_changed.size() > 0);
-					update_actions_queued = false;
 				} else if (scanning && scanning_done.is_set()) {
 					set_process(false);
 
@@ -2174,19 +2163,26 @@ void EditorFileSystem::_notification(int p_what) {
 					ResourceImporter::load_on_startup = nullptr;
 					emit_signal(SNAME("filesystem_changed"));
 					emit_signal(SNAME("sources_changed"), sources_changed.size() > 0);
-					update_actions_queued = false;
 				}
 
 				prevent_recursive_process_hack = false;
 			}
-
-			if (!is_scanning() && scan_changes_pending) {
+			if (is_scanning()) {
+				break;
+			}
+			if (_reload_loader_or_saver()) {
+				break;
+			}
+			// Another scan needs to be triggered during the scan.
+			if (scan_changes_pending) {
 				set_process(false);
 				scan_changes_pending = false;
 				_scan_dirs_changes(false);
+				break;
 			}
-
-			if (!is_scanning() && update_actions_queued) {
+			// The calls to _update_scan_actions() triggered by update_files() are merged into one.
+			// This is usually triggered when saving files.
+			if (update_actions_queued) {
 				set_process(false);
 				_update_global_script_class_activation();
 				updating_scan_actions = true;
@@ -2516,51 +2512,22 @@ void EditorFileSystem::_update_files_icon_path(EditorFileSystemDirectory *edp) {
 }
 
 void EditorFileSystem::_update_script_classes() {
-	if (update_script_paths.is_empty()) {
+	if (!script_classes_updated) {
 		// Ensure the global class file is always present; it's essential for exports to work.
 		if (!FileAccess::exists(ProjectSettings::get_singleton()->get_global_class_list_path())) {
 			EditorNode::get_editor_data().script_class_save_global_classes();
 		}
 		return;
 	}
-
-	{
-		MutexLock update_script_lock(update_script_mutex);
-
-		EditorProgress *ep = nullptr;
-		if (update_script_paths.size() > 1) {
-			if (MessageQueue::get_singleton()->is_flushing()) {
-				// Use background progress when message queue is flushing.
-				ep = memnew(EditorProgress("update_scripts_classes", TTR("Registering global classes..."), update_script_paths.size(), false, true));
-			} else {
-				ep = memnew(EditorProgress("update_scripts_classes", TTR("Registering global classes..."), update_script_paths.size()));
-			}
-		}
-
-		int step_count = 0;
-		for (const KeyValue<String, ScriptClassInfoUpdate> &E : update_script_paths) {
-			_register_global_class_script(E.key, E.key, E.value);
-			if (ep) {
-				ep->step(E.value.name, step_count++, false);
-			}
-		}
-
-		memdelete_notnull(ep);
-
-		update_script_paths.clear();
-	}
-
+	script_classes_updated = false;
 	EditorNode::get_editor_data().script_class_save_global_classes();
-
 	emit_signal("script_classes_updated");
+
+	// TODO: The scripts have been modified, so a rescan may be necessary.
 
 	// Rescan custom loaders and savers.
 	// Doing the following here because the `filesystem_changed` signal fires multiple times and isn't always followed by script classes update.
 	// So I thought it's better to do this when script classes really get updated
-	ResourceLoader::remove_custom_loaders();
-	ResourceLoader::add_custom_loaders();
-	ResourceSaver::remove_custom_savers();
-	ResourceSaver::add_custom_savers();
 }
 
 void EditorFileSystem::_update_script_documentation() {
@@ -2591,23 +2558,26 @@ void EditorFileSystem::_update_script_documentation() {
 			continue;
 		}
 
-		if (path.ends_with(".tscn")) {
+		if (efd->files[index]->status & EditorFileInfo::IS_PACKEDSCENE) {
 			Ref<PackedScene> packed_scene = ResourceLoader::load(path);
-			if (packed_scene.is_valid()) {
-				Ref<SceneState> state = packed_scene->get_state();
-				if (state.is_valid()) {
-					Vector<Ref<Resource>> sub_resources = state->get_sub_resources();
-					for (Ref<Resource> sub_resource : sub_resources) {
-						Ref<Script> scr = sub_resource;
-						if (scr.is_valid()) {
-							for (const DocData::ClassDoc &cd : scr->get_documentation()) {
-								EditorHelp::add_doc(cd);
-								if (!first_scan) {
-									// Update the documentation in the Script Editor if it is open.
-									ScriptEditor::get_singleton()->update_doc(cd.name);
-								}
-							}
-						}
+			if (packed_scene.is_null()) {
+				continue;
+			}
+			Ref<SceneState> state = packed_scene->get_state();
+			if (state.is_null()) {
+				continue;
+			}
+			Vector<Ref<Resource>> sub_resources = state->get_sub_resources();
+			for (Ref<Resource> &sub_resource : sub_resources) {
+				Ref<Script> scr = sub_resource;
+				if (scr.is_null()) {
+					continue;
+				}
+				for (const DocData::ClassDoc &cd : scr->get_documentation()) {
+					EditorHelp::add_doc(cd);
+					if (!first_scan) {
+						// Update the documentation in the Script Editor if it is open.
+						ScriptEditor::get_singleton()->update_doc(cd.name);
 					}
 				}
 			}
@@ -2720,20 +2690,24 @@ void EditorFileSystem::_update_scene_groups() {
 void EditorFileSystem::_update_pending_scene_groups() {
 	if (!FileAccess::exists(ProjectSettings::get_singleton()->get_scene_groups_cache_path())) {
 		_get_all_scenes(get_filesystem(), update_scene_paths);
-		_update_scene_groups();
-	} else if (!update_scene_paths.is_empty()) {
-		_update_scene_groups();
 	}
+	_update_scene_groups();
 }
 
 void EditorFileSystem::_queue_update_scene_groups(const String &p_path) {
-	MutexLock update_scene_lock(update_scene_mutex);
-	update_scene_paths.insert(p_path);
+	{
+		MutexLock update_scene_lock(update_scene_mutex);
+		update_scene_paths.insert(p_path);
+	}
+	{
+		MutexLock update_script_lock(update_script_mutex);
+		update_script_paths_documentation.insert(p_path);
+	}
 }
 
 void EditorFileSystem::_get_all_scenes(EditorFileSystemDirectory *p_dir, HashSet<String> &r_list) {
 	for (int i = 0; i < p_dir->get_file_count(); i++) {
-		if (p_dir->get_file_type(i) == PackedScene::get_class_static()) {
+		if (p_dir->files[i]->status & EditorFileInfo::IS_PACKEDSCENE) {
 			r_list.insert(p_dir->get_file_path(i));
 		}
 	}
