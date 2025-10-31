@@ -387,8 +387,12 @@ class EditorFileSystem : public Node {
 	};
 	HashMap<StringName, ScriptClassAlternatives> global_script_class_alternatives;
 
+	bool script_classes_updated = false;
+	bool loader_changed = false;
+	bool saver_changed = false;
+	void _check_loader_or_saver_changed(const ScriptClassInfo &p_class_info);
+
 	Mutex update_script_mutex;
-	HashMap<String, ScriptClassInfoUpdate> update_script_paths;
 	HashSet<String> update_script_paths_documentation;
 	void _update_script_classes();
 	void _update_script_documentation();

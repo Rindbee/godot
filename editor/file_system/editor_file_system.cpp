@@ -1029,6 +1029,7 @@ void EditorFileSystem::_create_actions_from_uid_change(EditorFileInfo *p_fi, con
 }
 
 bool EditorFileSystem::_update_scan_actions() {
+	update_actions_queued = false;
 	sources_changed.clear();
 
 	// We need to update the script global class names before the reimports to be sure that
@@ -1503,6 +1504,14 @@ void EditorFileSystem::_import_validate(EditorFileInfo *p_file, const String &p_
 	}
 }
 
+void EditorFileSystem::_check_loader_or_saver_changed(const ScriptClassInfo &p_class_info) {
+	if (p_class_info.extends == ResourceFormatLoader::get_class_static()) {
+		loader_changed = true;
+	} else if (p_class_info.extends == ResourceFormatSaver::get_class_static()) {
+		saver_changed = true;
+	}
+}
+
 void EditorFileSystem::_script_class_info_update(EditorFileInfo *p_file, const String &p_path, const ScriptClassInfo *p_sci) {
 	ScriptClassInfo &sci = p_file->class_info;
 
@@ -1514,6 +1523,8 @@ void EditorFileSystem::_script_class_info_update(EditorFileInfo *p_file, const S
 			scas.alternatives.erase(p_path);
 
 			if (scas.active && scas.active_uid == p_file->uid && scas.active_path == p_path) {
+				script_classes_updated = true;
+				_check_loader_or_saver_changed(sci);
 				ScriptServer::remove_global_class(sci.name);
 				EditorHelp::remove_doc(sci.name);
 
@@ -1530,7 +1541,7 @@ void EditorFileSystem::_script_class_info_update(EditorFileInfo *p_file, const S
 					scas.active_uid = scas.alternatives.begin()->value->uid;
 
 					EditorFileInfo *fi = scas.alternatives[scas.active_path];
-
+					_check_loader_or_saver_changed(fi->class_info);
 					ScriptServer::add_global_class(fi->class_info.name, fi->class_info.extends, fi->class_info.lang, scas.active_path, fi->class_info.is_abstract, fi->class_info.is_tool, fi->uid);
 					EditorNode::get_editor_data().script_class_set_icon_path(fi->class_info.name, fi->class_info.icon_path);
 					EditorNode::get_editor_data().script_class_set_name(scas.active_path, fi->class_info.name);
@@ -1561,6 +1572,8 @@ void EditorFileSystem::_script_class_info_update(EditorFileInfo *p_file, const S
 			if (E->value.active_path != p_path) {
 				return;
 			}
+			script_classes_updated = true;
+			_check_loader_or_saver_changed(sci);
 			// Just update the UID.
 			E->value.active_uid = p_file->uid;
 			ScriptServer::add_global_class(sci.name, sci.extends, sci.lang, p_path, sci.is_abstract, sci.is_tool, p_file->uid);
@@ -1591,9 +1604,16 @@ void EditorFileSystem::_script_class_info_update(EditorFileInfo *p_file, const S
 	}
 
 	if (updat_cache) {
+		script_classes_updated = true;
+		_check_loader_or_saver_changed(sci);
 		ScriptServer::add_global_class(sci.name, sci.extends, sci.lang, p_path, sci.is_abstract, sci.is_tool, p_file->uid);
 		EditorNode::get_editor_data().script_class_set_icon_path(sci.name, sci.icon_path);
 		EditorNode::get_editor_data().script_class_set_name(p_path, sci.name);
+
+		{
+			MutexLock update_script_lock(update_script_mutex);
+			update_script_paths_documentation.insert(p_path);
+		}
 	}
 }
 
@@ -2172,7 +2192,6 @@ void EditorFileSystem::_notification(int p_what) {
 						emit_signal(SNAME("filesystem_changed"));
 					}
 					emit_signal(SNAME("sources_changed"), sources_changed.size() > 0);
-					update_actions_queued = false;
 				} else if (scanning && scanning_done.is_set()) {
 					set_process(false);
 
@@ -2190,24 +2209,31 @@ void EditorFileSystem::_notification(int p_what) {
 					ResourceImporter::load_on_startup = nullptr;
 					emit_signal(SNAME("filesystem_changed"));
 					emit_signal(SNAME("sources_changed"), sources_changed.size() > 0);
-					update_actions_queued = false;
 				}
 
 				prevent_recursive_process_hack = false;
 			}
-
-			if (!is_scanning() && scan_changes_pending) {
+			if (is_scanning()) {
+				break;
+			}
+			if (loader_changed || scan_changes_pending) {
 				set_process(false);
 				scan_changes_pending = false;
-				_scan_dirs_changes(false);
+				if (loader_changed) {
+					loader_changed = false;
+					ResourceLoader::remove_custom_loaders();
+					ResourceLoader::add_custom_loaders();
+					update_extensions();
+				} else {
+					_scan_dirs_changes(false);
+				}
+				break;
 			}
-
-			if (!is_scanning() && update_actions_queued) {
+			if (update_actions_queued) {
 				set_process(false);
 				if (_update_scan_actions()) {
 					emit_signal(SNAME("filesystem_changed"));
 				}
-				update_actions_queued = false;
 			}
 		} break;
 	}
@@ -2539,51 +2565,28 @@ void EditorFileSystem::_update_files_icon_path(EditorFileSystemDirectory *edp) {
 }
 
 void EditorFileSystem::_update_script_classes() {
-	if (update_script_paths.is_empty()) {
+	if (!script_classes_updated) {
 		// Ensure the global class file is always present; it's essential for exports to work.
 		if (!FileAccess::exists(ProjectSettings::get_singleton()->get_global_class_list_path())) {
 			EditorNode::get_editor_data().script_class_save_global_classes();
 		}
 		return;
 	}
-
-	{
-		MutexLock update_script_lock(update_script_mutex);
-
-		EditorProgress *ep = nullptr;
-		if (update_script_paths.size() > 1) {
-			if (MessageQueue::get_singleton()->is_flushing()) {
-				// Use background progress when message queue is flushing.
-				ep = memnew(EditorProgress("update_scripts_classes", TTR("Registering global classes..."), update_script_paths.size(), false, true));
-			} else {
-				ep = memnew(EditorProgress("update_scripts_classes", TTR("Registering global classes..."), update_script_paths.size()));
-			}
-		}
-
-		int step_count = 0;
-		for (const KeyValue<String, ScriptClassInfoUpdate> &E : update_script_paths) {
-			_register_global_class_script(E.key, E.key, E.value);
-			if (ep) {
-				ep->step(E.value.name, step_count++, false);
-			}
-		}
-
-		memdelete_notnull(ep);
-
-		update_script_paths.clear();
-	}
-
+	script_classes_updated = false;
 	EditorNode::get_editor_data().script_class_save_global_classes();
-
 	emit_signal("script_classes_updated");
+
+	// TODO: The scripts have been modified, so a rescan may be necessary.
 
 	// Rescan custom loaders and savers.
 	// Doing the following here because the `filesystem_changed` signal fires multiple times and isn't always followed by script classes update.
 	// So I thought it's better to do this when script classes really get updated
-	ResourceLoader::remove_custom_loaders();
-	ResourceLoader::add_custom_loaders();
-	ResourceSaver::remove_custom_savers();
-	ResourceSaver::add_custom_savers();
+
+	if (saver_changed) {
+		saver_changed = false;
+		ResourceSaver::remove_custom_savers();
+		ResourceSaver::add_custom_savers();
+	}
 }
 
 void EditorFileSystem::_update_script_documentation() {
@@ -2614,23 +2617,26 @@ void EditorFileSystem::_update_script_documentation() {
 			continue;
 		}
 
-		if (path.ends_with(".tscn")) {
+		if (efd->files[index]->status & EditorFileInfo::IS_PACKEDSCENE) {
 			Ref<PackedScene> packed_scene = ResourceLoader::load(path);
-			if (packed_scene.is_valid()) {
-				Ref<SceneState> state = packed_scene->get_state();
-				if (state.is_valid()) {
-					Vector<Ref<Resource>> sub_resources = state->get_sub_resources();
-					for (Ref<Resource> sub_resource : sub_resources) {
-						Ref<Script> scr = sub_resource;
-						if (scr.is_valid()) {
-							for (const DocData::ClassDoc &cd : scr->get_documentation()) {
-								EditorHelp::add_doc(cd);
-								if (!first_scan) {
-									// Update the documentation in the Script Editor if it is open.
-									ScriptEditor::get_singleton()->update_doc(cd.name);
-								}
-							}
-						}
+			if (packed_scene.is_null()) {
+				continue;
+			}
+			Ref<SceneState> state = packed_scene->get_state();
+			if (state.is_null()) {
+				continue;
+			}
+			Vector<Ref<Resource>> sub_resources = state->get_sub_resources();
+			for (Ref<Resource> sub_resource : sub_resources) {
+				Ref<Script> scr = sub_resource;
+				if (scr.is_null()) {
+					continue;
+				}
+				for (const DocData::ClassDoc &cd : scr->get_documentation()) {
+					EditorHelp::add_doc(cd);
+					if (!first_scan) {
+						// Update the documentation in the Script Editor if it is open.
+						ScriptEditor::get_singleton()->update_doc(cd.name);
 					}
 				}
 			}
@@ -2743,20 +2749,24 @@ void EditorFileSystem::_update_scene_groups() {
 void EditorFileSystem::_update_pending_scene_groups() {
 	if (!FileAccess::exists(ProjectSettings::get_singleton()->get_scene_groups_cache_path())) {
 		_get_all_scenes(get_filesystem(), update_scene_paths);
-		_update_scene_groups();
-	} else if (!update_scene_paths.is_empty()) {
-		_update_scene_groups();
 	}
+	_update_scene_groups();
 }
 
 void EditorFileSystem::_queue_update_scene_groups(const String &p_path) {
-	MutexLock update_scene_lock(update_scene_mutex);
-	update_scene_paths.insert(p_path);
+	{
+		MutexLock update_scene_lock(update_scene_mutex);
+		update_scene_paths.insert(p_path);
+	}
+	{
+		MutexLock update_script_lock(update_script_mutex);
+		update_script_paths_documentation.insert(p_path);
+	}
 }
 
 void EditorFileSystem::_get_all_scenes(EditorFileSystemDirectory *p_dir, HashSet<String> &r_list) {
 	for (int i = 0; i < p_dir->get_file_count(); i++) {
-		if (p_dir->get_file_type(i) == PackedScene::get_class_static()) {
+		if (p_dir->files[i]->status & EditorFileInfo::IS_PACKEDSCENE) {
 			r_list.insert(p_dir->get_file_path(i));
 		}
 	}
