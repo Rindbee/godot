@@ -353,24 +353,6 @@ class EditorFileSystem : public Node {
 		}
 	};
 
-	struct ScriptClassInfoUpdate : public ScriptClassInfo {
-		StringName type;
-		ScriptClassInfoUpdate() = default;
-		explicit ScriptClassInfoUpdate(const ScriptClassInfo &p_info) :
-				ScriptClassInfo(p_info) {}
-		static ScriptClassInfoUpdate from_file_info(const EditorFileInfo *p_fi) {
-			ScriptClassInfoUpdate update;
-			update.type = p_fi->type;
-			update.name = p_fi->class_info.name;
-			update.extends = p_fi->class_info.extends;
-			update.lang = p_fi->class_info.lang;
-			update.icon_path = p_fi->class_info.icon_path;
-			update.is_abstract = p_fi->class_info.is_abstract;
-			update.is_tool = p_fi->class_info.is_tool;
-			return update;
-		}
-	};
-
 	HashMap<String, EditorFileInfo *> script_file_info;
 	struct ScriptClassAlternatives {
 		bool active = false;
@@ -444,7 +426,7 @@ class EditorFileSystem : public Node {
 	bool _remove_invalid_global_class_names(const HashSet<String> &p_existing_class_names);
 	String _get_file_by_class_name(EditorFileSystemDirectory *p_dir, const String &p_class_name, EditorFileInfo *&r_file_info);
 
-	void _register_global_class_script(const String &p_search_path, const String &p_target_path, const ScriptClassInfoUpdate &p_script_update);
+	void _register_global_class_script(const String &p_search_path, const String &p_target_path, const EditorFileInfo *p_fi);
 
 protected:
 	void _notification(int p_what);

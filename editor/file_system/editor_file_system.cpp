@@ -2764,17 +2764,17 @@ HashSet<String> EditorFileSystem::get_valid_extensions() const {
 	return valid_extensions;
 }
 
-void EditorFileSystem::_register_global_class_script(const String &p_search_path, const String &p_target_path, const ScriptClassInfoUpdate &p_script_update) {
+void EditorFileSystem::_register_global_class_script(const String &p_search_path, const String &p_target_path, const EditorFileInfo *p_fi) {
 	ScriptServer::remove_global_class_by_path(p_search_path); // First remove, just in case it changed.
 
-	if (p_script_update.name.is_empty()) {
+	if (p_fi->class_info.name.is_empty()) {
 		return;
 	}
 
-	String lang = p_script_update.lang;
+	String lang = p_fi->class_info.lang;
 	if (lang.is_empty()) {
 		for (int j = 0; j < ScriptServer::get_language_count(); j++) {
-			if (ScriptServer::get_language(j)->handles_global_class_type(p_script_update.type)) {
+			if (ScriptServer::get_language(j)->handles_global_class_type(p_fi->type)) {
 				lang = ScriptServer::get_language(j)->get_name();
 				break;
 			}
@@ -2782,10 +2782,9 @@ void EditorFileSystem::_register_global_class_script(const String &p_search_path
 	}
 	ERR_FAIL_COND(lang.is_empty()); // No lang found that can handle this global class.
 
-	ResourceUID::ID uid = first_scan && !scanning_done.is_set() ? ResourceLoader::get_resource_uid(p_target_path) : get_file_uid(p_target_path);
-	ScriptServer::add_global_class(p_script_update.name, p_script_update.extends, lang, p_target_path, p_script_update.is_abstract, p_script_update.is_tool, uid);
-	EditorNode::get_editor_data().script_class_set_icon_path(p_script_update.name, p_script_update.icon_path);
-	EditorNode::get_editor_data().script_class_set_name(p_target_path, p_script_update.name);
+	ScriptServer::add_global_class(p_fi->class_info.name, p_fi->class_info.extends, lang, p_target_path, p_fi->class_info.is_abstract, p_fi->class_info.is_tool, p_fi->uid);
+	EditorNode::get_editor_data().script_class_set_icon_path(p_fi->class_info.name, p_fi->class_info.icon_path);
+	EditorNode::get_editor_data().script_class_set_name(p_target_path, p_fi->class_info.name);
 }
 
 void EditorFileSystem::register_global_class_script(const String &p_search_path, const String &p_target_path) {
@@ -2793,7 +2792,7 @@ void EditorFileSystem::register_global_class_script(const String &p_search_path,
 	EditorFileSystemDirectory *efsd = find_file(p_search_path, &index_file);
 	if (efsd) {
 		const EditorFileInfo *fi = efsd->files[index_file];
-		EditorFileSystem::get_singleton()->_register_global_class_script(p_search_path, p_target_path, ScriptClassInfoUpdate::from_file_info(fi));
+		EditorFileSystem::get_singleton()->_register_global_class_script(p_search_path, p_target_path, fi);
 	} else {
 		ScriptServer::remove_global_class_by_path(p_search_path);
 	}
