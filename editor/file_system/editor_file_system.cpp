@@ -620,11 +620,10 @@ void EditorFileSystem::_scan_filesystem() {
 
 	dep_update_list.clear();
 
+	_update_scan_uid_actions();
 	if (first_scan) {
 		memdelete(first_scan_root_dir);
 		first_scan_root_dir = nullptr;
-	} else {
-		_update_global_script_class_activation();
 	}
 }
 
@@ -934,38 +933,27 @@ bool EditorFileSystem::_import_support_abort_scan(const Vector<String> &reimport
 	return false;
 }
 
+void EditorFileSystem::_reset_uid_points() {
+	scan_uid_actions.clear();
+	ItemUIDAction ia;
+	uid_newly_add_end = scan_uid_actions.push_back(ia);
+	uid_move_end = scan_uid_actions.push_back(ia);
+}
+
 void EditorFileSystem::_reset_points() {
 	scan_actions.clear();
 	ItemAction ia;
-	uid_newly_add_end = scan_actions.push_front(ia);
-	uid_move_end = scan_actions.insert_after(uid_newly_add_end, ia);
-	normal = scan_actions.insert_after(uid_move_end, ia);
+	normal = scan_actions.push_back(ia);
 	remove_point = scan_actions.push_back(ia);
 }
 
 void EditorFileSystem::_create_action(EditorFileSystemDirectory *p_dir, EditorFileInfo *p_fi, const String &p_path, const ItemAction::Action p_action, const ItemAction::Step p_step, const ResourceUID::ID p_old_uid) {
 	ItemAction ia;
 	ia.action = p_action;
-	ia.old_uid = p_old_uid;
 	ia.path = p_path;
 	ia.file = p_fi;
 	ia.dir = p_dir;
 	switch (p_step) {
-		case ItemAction::STEP_UID_VALIDATE: {
-			scan_actions.push_front(ia);
-		} break;
-		case ItemAction::STEP_UID_NEWLY_ADD: {
-			scan_actions.insert_before(uid_newly_add_end, ia);
-		} break;
-		case ItemAction::STEP_UID_REMOVE: {
-			scan_actions.insert_after(uid_newly_add_end, ia);
-		} break;
-		case ItemAction::STEP_UID_PENDING_ADD: {
-			scan_actions.insert_before(uid_move_end, ia);
-		} break;
-		case ItemAction::STEP_UID_REGENERATE: {
-			scan_actions.insert_after(uid_move_end, ia);
-		} break;
 		case ItemAction::STEP_NORMAL: {
 			scan_actions.insert_before(normal, ia);
 		} break;
@@ -983,6 +971,32 @@ void EditorFileSystem::_create_action(EditorFileSystemDirectory *p_dir, EditorFi
 	}
 }
 
+void EditorFileSystem::_create_uid_action(EditorFileInfo *p_fi, const String &p_path, const ItemUIDAction::UIDAction p_action, const ItemUIDAction::UIDStep p_step, const ResourceUID::ID p_old_uid) {
+	ItemUIDAction ia;
+	ia.action = p_action;
+	ia.path = p_path;
+	ia.file = p_fi;
+	switch (p_step) {
+		case ItemUIDAction::STEP_UID_VALIDATE: {
+			scan_uid_actions.push_front(ia);
+		} break;
+		case ItemUIDAction::STEP_UID_NEWLY_ADD: {
+			scan_uid_actions.insert_before(uid_newly_add_end, ia);
+		} break;
+		case ItemUIDAction::STEP_UID_REMOVE: {
+			scan_uid_actions.insert_after(uid_newly_add_end, ia);
+		} break;
+		case ItemUIDAction::STEP_UID_PENDING_ADD: {
+			scan_uid_actions.insert_before(uid_move_end, ia);
+		} break;
+		case ItemUIDAction::STEP_UID_REGENERATE: {
+			scan_uid_actions.insert_after(uid_move_end, ia);
+		} break;
+		case ItemUIDAction::STEP_UID_MAX: {
+		} break;
+	}
+}
+
 void EditorFileSystem::_create_actions_from_uid_change(EditorFileInfo *p_fi, const String &p_path, const ResourceUID::ID p_old_uid) {
 	ERR_FAIL_NULL(p_fi);
 
@@ -991,15 +1005,15 @@ void EditorFileSystem::_create_actions_from_uid_change(EditorFileInfo *p_fi, con
 			return;
 		}
 		// Files that are no longer as resource or no longer tracked.
-		_create_action(nullptr, p_fi, p_path, ItemAction::ACTION_UID_REMOVE, ItemAction::STEP_UID_REMOVE, p_old_uid);
+		_create_uid_action(p_fi, p_path, ItemUIDAction::ACTION_UID_REMOVE, ItemUIDAction::STEP_UID_REMOVE, p_old_uid);
 		return;
 	} else if (p_fi->status & EditorFileInfo::FILE_ADD) {
 		if (p_fi->uid == ResourceUID::INVALID_ID) {
 			// Newly added files. It is also possible that the skip/keep type import file was removed.
-			_create_action(nullptr, p_fi, p_path, ItemAction::ACTION_UID_ADD, ItemAction::STEP_UID_NEWLY_ADD, p_old_uid);
+			_create_uid_action(p_fi, p_path, ItemUIDAction::ACTION_UID_ADD, ItemUIDAction::STEP_UID_NEWLY_ADD, p_old_uid);
 		} else {
 			// The file was moved or duplicated.
-			_create_action(nullptr, p_fi, p_path, ItemAction::ACTION_UID_PENDING_ADD, ItemAction::STEP_UID_PENDING_ADD, p_old_uid);
+			_create_uid_action(p_fi, p_path, ItemUIDAction::ACTION_UID_PENDING_ADD, ItemUIDAction::STEP_UID_PENDING_ADD, p_old_uid);
 		}
 		return;
 	}
@@ -1008,21 +1022,123 @@ void EditorFileSystem::_create_actions_from_uid_change(EditorFileInfo *p_fi, con
 		if (p_fi->uid == p_old_uid) {
 			if (first_scan) {
 				// The UID cache may be invalid. Edge case.
-				_create_action(nullptr, p_fi, p_path, ItemAction::ACTION_UID_PENDING_ADD, ItemAction::STEP_UID_VALIDATE, p_old_uid);
+				_create_uid_action(p_fi, p_path, ItemUIDAction::ACTION_UID_PENDING_ADD, ItemUIDAction::STEP_UID_VALIDATE, p_old_uid);
 			}
 			return;
 		}
 		// The file was overwritten. Remove the old uid.
-		_create_action(nullptr, p_fi, p_path, ItemAction::ACTION_UID_REMOVE, ItemAction::STEP_UID_REMOVE, p_old_uid);
+		_create_uid_action(p_fi, p_path, ItemUIDAction::ACTION_UID_REMOVE, ItemUIDAction::STEP_UID_REMOVE, p_old_uid);
 	}
 
 	if (p_fi->uid == ResourceUID::INVALID_ID) {
 		// The internal files are removed. Re-add(create) the uid.
-		_create_action(nullptr, p_fi, p_path, ItemAction::ACTION_UID_ADD, ItemAction::STEP_UID_PENDING_ADD, p_old_uid);
+		_create_uid_action(p_fi, p_path, ItemUIDAction::ACTION_UID_ADD, ItemUIDAction::STEP_UID_PENDING_ADD, p_old_uid);
 	} else {
 		// The file may be overwritten.
-		_create_action(nullptr, p_fi, p_path, ItemAction::ACTION_UID_PENDING_ADD, ItemAction::STEP_UID_PENDING_ADD, p_old_uid);
+		_create_uid_action(p_fi, p_path, ItemUIDAction::ACTION_UID_PENDING_ADD, ItemUIDAction::STEP_UID_PENDING_ADD, p_old_uid);
 	}
+}
+
+bool EditorFileSystem::_update_scan_uid_actions() {
+	bool fs_changed = false;
+
+	EditorProgress *ep = nullptr;
+	if (scan_uid_actions.size() > (EditorFileSystem::ItemUIDAction::STEP_UID_MAX / 2 + 1)) {
+		ep = memnew(EditorProgress("_update_scan_uid_actions", TTR("Scanning uid actions..."), scan_uid_actions.size()));
+	}
+	int step_count = 0;
+	for (const ItemUIDAction &ia : scan_uid_actions) {
+		switch (ia.action) {
+			case ItemUIDAction::ACTION_UID_NONE: {
+				continue;
+			} break;
+			case ItemUIDAction::ACTION_UID_ADD: {
+				print_verbose(vformat("[%.6f] [ADD UID] old uid: %s, uid: %s, path: %s.",
+						OS::get_singleton()->get_ticks_usec() / 1000000.0f,
+						ResourceUID::get_singleton()->id_to_text(ia.old_uid),
+						ResourceUID::get_singleton()->id_to_text(ia.file->uid),
+						ia.path));
+				if (ia.old_uid == ResourceUID::INVALID_ID || ResourceUID::get_singleton()->has_id(ia.old_uid)) {
+					ia.file->uid = ResourceUID::get_singleton()->create_id_for_path(ia.path);
+				} else {
+					ia.file->uid = ia.old_uid;
+				}
+				ResourceUID::get_singleton()->add_id(ia.file->uid, ia.path);
+				// Update internal file.
+				if (ia.file->status & EditorFileInfo::IS_IMPORTABLE) {
+					const String internal_path = ia.path + ".import";
+					Ref<ConfigFile> cfg;
+					cfg.instantiate();
+					Error err = cfg->load(internal_path);
+					if (err == OK) {
+						cfg->set_value("remap", "uid", ResourceUID::get_singleton()->id_to_text(ia.file->uid));
+						err = cfg->save(internal_path);
+						ia.file->internal_modified_time = FileAccess::get_modified_time(internal_path);
+					}
+				} else if (ia.file->status & EditorFileInfo::HAS_CUSTOM_UID_SUPPORT) {
+					ResourceSaver::set_uid(ia.path, ia.file->uid);
+					ia.file->modified_time = FileAccess::get_modified_time(ia.path);
+				} else {
+					const String internal_path = ia.path + ".uid";
+					Ref<FileAccess> f = FileAccess::open(internal_path, FileAccess::WRITE);
+					if (f.is_valid()) {
+						f->store_line(ResourceUID::get_singleton()->id_to_text(ia.file->uid));
+						f->close();
+						ia.file->internal_modified_time = FileAccess::get_modified_time(internal_path);
+					}
+				}
+				fs_changed = true; // The timestamp has changed.
+				print_verbose(vformat("[ADD UID] %s, %s", ia.path, ResourceUID::get_singleton()->id_to_text(ia.file->uid)));
+			} break;
+			case ItemUIDAction::ACTION_UID_REMOVE: {
+				print_verbose(vformat("[%.6f] [REMOVE UID] old uid: %s, uid: %s, path: %s.",
+						OS::get_singleton()->get_ticks_usec() / 1000000.0f,
+						ResourceUID::get_singleton()->id_to_text(ia.old_uid),
+						ResourceUID::get_singleton()->id_to_text(ia.file->uid),
+						ia.path));
+				if (!first_scan || ResourceUID::get_singleton()->has_id(ia.old_uid)) {
+					ResourceUID::get_singleton()->remove_id(ia.old_uid);
+				}
+			} break;
+			case ItemUIDAction::ACTION_UID_PENDING_ADD: {
+				print_verbose(vformat("[%.6f] [TEST ADD UID] old uid: %s, uid: %s, path: %s.",
+						OS::get_singleton()->get_ticks_usec() / 1000000.0f,
+						ResourceUID::get_singleton()->id_to_text(ia.old_uid),
+						ResourceUID::get_singleton()->id_to_text(ia.file->uid),
+						ia.path));
+				if (ResourceUID::get_singleton()->has_id(ia.file->uid)) {
+					const String cache_uid_path = ResourceUID::get_singleton()->get_id_path(ia.file->uid);
+					if (cache_uid_path != ia.path) {
+						WARN_PRINT(vformat("Duplicate UID detected for Resource at \"%s\".\nOld Resource path: \"%s\". The new file UID was changed automatically.", ia.path, cache_uid_path));
+						if (ia.old_uid != ResourceUID::INVALID_ID && ia.old_uid != ia.file->uid && ResourceUID::get_singleton()->has_id(ia.old_uid)) {
+							// Files may be overwritten.
+							_create_uid_action(ia.file, ia.path, ItemUIDAction::ACTION_UID_ADD, ItemUIDAction::STEP_UID_PENDING_ADD, ia.old_uid);
+						} else {
+							// Files may be duplicate.
+							_create_uid_action(ia.file, ia.path, ItemUIDAction::ACTION_UID_ADD, ItemUIDAction::STEP_UID_REGENERATE);
+						}
+						step_count--;
+					}
+				} else {
+					ResourceUID::get_singleton()->add_id(ia.file->uid, ia.path);
+				}
+			} break;
+			default: {
+			} break;
+		}
+
+		if (ep) {
+			ep->step(ia.path, step_count++, false);
+		}
+	}
+	memdelete_notnull(ep);
+
+	if (!first_scan) {
+		_update_global_script_class_activation();
+	}
+
+	_reset_uid_points();
+	return fs_changed;
 }
 
 bool EditorFileSystem::_update_scan_actions() {
@@ -1090,85 +1206,6 @@ bool EditorFileSystem::_update_scan_actions() {
 					ia.file->status &= ~EditorFileInfo::TEMPORARY;
 				}
 				reimports.push_back(ia.path);
-			} break;
-			case ItemAction::ACTION_UID_ADD: {
-				print_verbose(vformat("[%.6f] [ADD UID] old uid: %s, uid: %s, path: %s.",
-						OS::get_singleton()->get_ticks_usec() / 1000000.0f,
-						ResourceUID::get_singleton()->id_to_text(ia.old_uid),
-						ResourceUID::get_singleton()->id_to_text(ia.file->uid),
-						ia.path));
-				if (ia.old_uid == ResourceUID::INVALID_ID || ResourceUID::get_singleton()->has_id(ia.old_uid)) {
-					ia.file->uid = ResourceUID::get_singleton()->create_id_for_path(ia.path);
-				} else {
-					ia.file->uid = ia.old_uid;
-				}
-				ResourceUID::get_singleton()->add_id(ia.file->uid, ia.path);
-				// Update internal file.
-				if (ia.file->status & EditorFileInfo::IS_IMPORTABLE) {
-					const String internal_path = ia.path + ".import";
-					Ref<ConfigFile> cfg;
-					cfg.instantiate();
-					Error err = cfg->load(internal_path);
-					if (err == OK) {
-						cfg->set_value("remap", "uid", ResourceUID::get_singleton()->id_to_text(ia.file->uid));
-						err = cfg->save(internal_path);
-						ia.file->internal_modified_time = FileAccess::get_modified_time(internal_path);
-					}
-				} else if (ia.file->status & EditorFileInfo::HAS_CUSTOM_UID_SUPPORT) {
-					ResourceSaver::set_uid(ia.path, ia.file->uid);
-					ia.file->modified_time = FileAccess::get_modified_time(ia.path);
-				} else {
-					const String internal_path = ia.path + ".uid";
-					Ref<FileAccess> f = FileAccess::open(internal_path, FileAccess::WRITE);
-					if (f.is_valid()) {
-						f->store_line(ResourceUID::get_singleton()->id_to_text(ia.file->uid));
-						f->close();
-						ia.file->internal_modified_time = FileAccess::get_modified_time(internal_path);
-					}
-				}
-				fs_changed = true; // The timestamp has changed.
-				print_verbose(vformat("[ADD UID] %s, %s", ia.path, ResourceUID::get_singleton()->id_to_text(ia.file->uid)));
-				// Update class cache.
-				if (ia.file->status & EditorFileInfo::IS_ACTIVE_GLOBAL_CLASS_ALTERNATIVE) {
-					_global_script_class_info_add(ia.file, ia.path);
-				}
-			} break;
-			case ItemAction::ACTION_UID_REMOVE: {
-				print_verbose(vformat("[%.6f] [REMOVE UID] old uid: %s, uid: %s, path: %s.",
-						OS::get_singleton()->get_ticks_usec() / 1000000.0f,
-						ResourceUID::get_singleton()->id_to_text(ia.old_uid),
-						ResourceUID::get_singleton()->id_to_text(ia.file->uid),
-						ia.path));
-				if (!first_scan || ResourceUID::get_singleton()->has_id(ia.old_uid)) {
-					ResourceUID::get_singleton()->remove_id(ia.old_uid);
-				}
-			} break;
-			case ItemAction::ACTION_UID_PENDING_ADD: {
-				print_verbose(vformat("[%.6f] [TEST ADD UID] old uid: %s, uid: %s, path: %s.",
-						OS::get_singleton()->get_ticks_usec() / 1000000.0f,
-						ResourceUID::get_singleton()->id_to_text(ia.old_uid),
-						ResourceUID::get_singleton()->id_to_text(ia.file->uid),
-						ia.path));
-				if (ResourceUID::get_singleton()->has_id(ia.file->uid)) {
-					const String cache_uid_path = ResourceUID::get_singleton()->get_id_path(ia.file->uid);
-					if (cache_uid_path != ia.path) {
-						WARN_PRINT(vformat("Duplicate UID detected for Resource at \"%s\".\nOld Resource path: \"%s\". The new file UID was changed automatically.", ia.path, cache_uid_path));
-						if (ia.old_uid != ResourceUID::INVALID_ID && ia.old_uid != ia.file->uid && ResourceUID::get_singleton()->has_id(ia.old_uid)) {
-							// Files may be overwritten.
-							_create_action(nullptr, ia.file, ia.path, ItemAction::ACTION_UID_ADD, ItemAction::STEP_UID_PENDING_ADD, ia.old_uid);
-						} else {
-							// Files may be duplicate.
-							_create_action(nullptr, ia.file, ia.path, ItemAction::ACTION_UID_ADD, ItemAction::STEP_UID_REGENERATE);
-						}
-						step_count--;
-					}
-				} else {
-					ResourceUID::get_singleton()->add_id(ia.file->uid, ia.path);
-					// Update class cache.
-					if (ia.file->status & EditorFileInfo::IS_ACTIVE_GLOBAL_CLASS_ALTERNATIVE) {
-						_global_script_class_info_add(ia.file, ia.path);
-					}
-				}
 			} break;
 			default: {
 			} break;
@@ -1545,13 +1582,6 @@ void EditorFileSystem::_global_script_class_info_add(EditorFileInfo *p_file, con
 	ScriptClassInfo &sci = p_file->class_info;
 	ScriptClassAlternatives &scas = global_script_class_alternatives[sci.name];
 	scas.alternatives[p_path] = p_file;
-	// Just update the UID.
-	if (p_file->status & EditorFileInfo::IS_ACTIVE_GLOBAL_CLASS_ALTERNATIVE) {
-		scas.active_uid = p_file->uid;
-		script_classes_updated = true;
-		_check_loader_or_saver_changed(sci);
-		ScriptServer::add_global_class(sci.name, sci.extends, sci.lang, p_path, sci.is_abstract, sci.is_tool, p_file->uid);
-	}
 }
 
 void EditorFileSystem::_script_class_info_update(EditorFileInfo *p_file, const String &p_path, const ScriptClassInfo *p_sci) {
@@ -1966,7 +1996,7 @@ void EditorFileSystem::scan_fs_changes(ScanProgress &p_progress) {
 		}
 		_scan_fs_changes(efsd, p_progress, efsd->recursive);
 	}
-	_update_global_script_class_activation();
+	_update_scan_uid_actions();
 }
 
 void EditorFileSystem::_pending_scan_fs_changes(EditorFileSystemDirectory *p_dir, bool p_recursive) {
@@ -2184,7 +2214,7 @@ void EditorFileSystem::_notification(int p_what) {
 			// This is usually triggered when saving files.
 			if (update_actions_queued) {
 				set_process(false);
-				_update_global_script_class_activation();
+				_update_scan_uid_actions();
 				updating_scan_actions = true;
 				if (_update_scan_actions()) {
 					emit_signal(SNAME("filesystem_changed"));
@@ -3991,6 +4021,7 @@ EditorFileSystem::EditorFileSystem() {
 	// if resources are loaded during the first scan.
 	ResourceImporter::load_on_startup = _load_resource_on_startup;
 
+	_reset_uid_points();
 	_reset_points();
 }
 

@@ -184,6 +184,28 @@ class EditorFileSystem : public Node {
 	using EditorFileInfo = EditorFileSystemDirectory::FileInfo;
 	using ScriptClassInfo = EditorFileInfo::ScriptClassInfo;
 
+	struct ItemUIDAction {
+		enum UIDAction {
+			ACTION_UID_NONE,
+			ACTION_UID_ADD,
+			ACTION_UID_REMOVE,
+			ACTION_UID_PENDING_ADD,
+		};
+		enum UIDStep {
+			STEP_UID_VALIDATE, // Verify the validity of the uid cache. Only when the editor starts.
+			STEP_UID_NEWLY_ADD, // Create and add new uids to files that do not have uids assigned to them.
+			STEP_UID_REMOVE, // Remove the outdated UID from the file info cache.
+			STEP_UID_PENDING_ADD, // Add the new UID obtained from the file.
+			STEP_UID_REGENERATE, // Recreate and add a new uid if the uid is already taken.
+			STEP_UID_MAX,
+		};
+
+		UIDAction action = ACTION_UID_NONE;
+		ResourceUID::ID old_uid = ResourceUID::INVALID_ID; // Only used for UID actions. Can be used as a fallback value or a delete value.
+		String path; // In order to reduce the count of path calculations.
+		EditorFileInfo *file = nullptr;
+	};
+
 	struct ItemAction {
 		enum Action {
 			ACTION_NONE,
@@ -193,17 +215,8 @@ class EditorFileSystem : public Node {
 			ACTION_FILE_REMOVE,
 			ACTION_FILE_UPDATE,
 			ACTION_FILE_REIMPORT,
-			ACTION_UID_ADD,
-			ACTION_UID_REMOVE,
-			ACTION_UID_PENDING_ADD,
 		};
-
 		enum Step {
-			STEP_UID_VALIDATE, // Verify the validity of the uid cache. Only when the editor starts.
-			STEP_UID_NEWLY_ADD, // Create and add new uids to files that do not have uids assigned to them.
-			STEP_UID_REMOVE, // Remove the outdated UID from the file info cache.
-			STEP_UID_PENDING_ADD, // Add the new UID obtained from the file.
-			STEP_UID_REGENERATE, // Recreate and add a new uid if the uid is already taken.
 			STEP_NORMAL,
 			STEP_CLEAR_STATUS, // Clear the temporary flag of the file status for next use.
 			STEP_FILE_REMOVE,
@@ -212,7 +225,6 @@ class EditorFileSystem : public Node {
 		};
 
 		Action action = ACTION_NONE;
-		ResourceUID::ID old_uid = ResourceUID::INVALID_ID; // Only used for UID actions. Can be used as a fallback value or a delete value.
 		String path; // In order to reduce the count of path calculations.
 		EditorFileSystemDirectory *dir = nullptr;
 		EditorFileInfo *file = nullptr;
@@ -318,18 +330,21 @@ class EditorFileSystem : public Node {
 	static void _thread_func_sources(void *_userdata);
 
 	List<String> sources_changed;
+	List<ItemUIDAction> scan_uid_actions;
+	List<ItemUIDAction>::Element *uid_newly_add_end;
+	List<ItemUIDAction>::Element *uid_move_end;
 	List<ItemAction> scan_actions;
-
-	List<ItemAction>::Element *uid_newly_add_end;
-	List<ItemAction>::Element *uid_move_end;
 	List<ItemAction>::Element *normal;
 	List<ItemAction>::Element *remove_point;
 
+	void _reset_uid_points();
 	void _reset_points();
+	void _create_uid_action(EditorFileInfo *p_fi, const String &p_path, const ItemUIDAction::UIDAction p_action, const ItemUIDAction::UIDStep p_step, const ResourceUID::ID p_old_uid = ResourceUID::INVALID_ID);
 	void _create_action(EditorFileSystemDirectory *p_dir, EditorFileInfo *p_fi, const String &p_path, const ItemAction::Action p_action, const ItemAction::Step p_step = ItemAction::STEP_NORMAL, const ResourceUID::ID p_old_uid = ResourceUID::INVALID_ID);
 	void _create_actions_from_uid_change(EditorFileInfo *p_fi, const String &p_path, const ResourceUID::ID p_old_uid = ResourceUID::INVALID_ID);
 
 	bool updating_scan_actions = false;
+	bool _update_scan_uid_actions();
 	bool _update_scan_actions();
 
 	Error _reimport_file(const String &p_file, const HashMap<StringName, Variant> &p_custom_options = HashMap<StringName, Variant>(), const String &p_custom_importer = String(), Variant *generator_parameters = nullptr, bool p_update_file_system = true);
