@@ -240,6 +240,10 @@
 		<member name="item_count" type="int" setter="set_item_count" getter="get_item_count" default="0">
 			The number of items to select from.
 		</member>
+		<member name="match_popup_width" type="bool" setter="set_match_popup_width" getter="is_match_popup_width" default="true">
+			Make the width at least the width of the [PopupMenu].
+			[b]Note:[/b] For performance reasons, the minimum size doesn't update immediately when adding, removing or modifying items.
++		</member>
 		<member name="selected" type="int" setter="_select_int" getter="get_selected" default="-1">
 			The index of the currently selected item, or [code]-1[/code] if no item is selected.
 		</member>

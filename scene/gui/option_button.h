@@ -41,6 +41,7 @@ class OptionButton : public Button {
 	PopupMenu *popup = nullptr;
 	int current = -1;
 	bool fit_to_longest_item = true;
+	bool match_popup_width = true;
 	Vector2 _cached_size;
 	bool cache_refresh_pending = false;
 	bool allow_reselect = false;
@@ -125,6 +126,8 @@ public:
 	int get_item_count() const;
 	void set_fit_to_longest_item(bool p_fit);
 	bool is_fit_to_longest_item() const;
+	void set_match_popup_width(bool p_match);
+	bool is_match_popup_width() const;
 
 	void set_allow_reselect(bool p_allow);
 	bool get_allow_reselect() const;

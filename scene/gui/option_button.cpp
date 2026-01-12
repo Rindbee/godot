@@ -68,6 +68,10 @@ Size2 OptionButton::get_minimum_size() const {
 		minsize = content_size + padding;
 	}
 
+	if (match_popup_width) {
+		minsize.width = MAX(minsize.width, popup->get_contents_minimum_size().width);
+	}
+
 	return minsize;
 }
 
@@ -379,6 +383,19 @@ bool OptionButton::is_fit_to_longest_item() const {
 	return fit_to_longest_item;
 }
 
+void OptionButton::set_match_popup_width(bool p_match) {
+	if (p_match == match_popup_width) {
+		return;
+	}
+	match_popup_width = p_match;
+
+	_refresh_size_cache();
+}
+
+bool OptionButton::is_match_popup_width() const {
+	return match_popup_width;
+}
+
 void OptionButton::set_allow_reselect(bool p_allow) {
 	allow_reselect = p_allow;
 }
@@ -594,12 +611,15 @@ void OptionButton::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_selectable_item", "from_last"), &OptionButton::get_selectable_item, DEFVAL(false));
 	ClassDB::bind_method(D_METHOD("set_fit_to_longest_item", "fit"), &OptionButton::set_fit_to_longest_item);
 	ClassDB::bind_method(D_METHOD("is_fit_to_longest_item"), &OptionButton::is_fit_to_longest_item);
+	ClassDB::bind_method(D_METHOD("set_match_popup_width", "match"), &OptionButton::set_match_popup_width);
+	ClassDB::bind_method(D_METHOD("is_match_popup_width"), &OptionButton::is_match_popup_width);
 	ClassDB::bind_method(D_METHOD("set_allow_reselect", "allow"), &OptionButton::set_allow_reselect);
 	ClassDB::bind_method(D_METHOD("get_allow_reselect"), &OptionButton::get_allow_reselect);
 	ClassDB::bind_method(D_METHOD("set_disable_shortcuts", "disabled"), &OptionButton::set_disable_shortcuts);
 
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "selected"), "_select_int", "get_selected");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "fit_to_longest_item"), "set_fit_to_longest_item", "is_fit_to_longest_item");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "match_popup_width"), "set_match_popup_width", "is_match_popup_width");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "allow_reselect"), "set_allow_reselect", "get_allow_reselect");
 	ADD_ARRAY_COUNT("Items", "item_count", "set_item_count", "get_item_count", "popup/item_");
 
