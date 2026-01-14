@@ -30,7 +30,6 @@
 
 #include "editor_asset_installer.h"
 
-#include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/io/zip_io.h"
 #include "core/object/callable_mp.h"
@@ -555,7 +554,7 @@ void EditorAssetInstaller::_install_asset() {
 				target_path = target_path.substr(0, target_path.length() - 1);
 			}
 
-			da->make_dir_recursive(target_path);
+			EditorFileSystem::get_singleton()->make_dir_recursive(E->value, target_dir_path);
 		} else {
 			Vector<uint8_t> uncomp_data;
 			uncomp_data.resize(info.uncompressed_size);
@@ -573,7 +572,7 @@ void EditorAssetInstaller::_install_asset() {
 			}
 
 			// Ensure that the target folder exists.
-			da->make_dir_recursive(target_path.get_base_dir());
+			EditorFileSystem::get_singleton()->make_dir_recursive(E->value.get_base_dir(), target_dir_path);
 
 			if (_is_zip_entry_symlink(info)) {
 				String link_target = String::utf8(reinterpret_cast<const char *>(uncomp_data.ptr()), uncomp_data.size());
@@ -615,7 +614,7 @@ void EditorAssetInstaller::_install_asset() {
 		}
 	}
 
-	EditorFileSystem::get_singleton()->scan_changes();
+	EditorFileSystem::get_singleton()->pending_scan_fs_changes(target_dir_path, true);
 }
 
 void EditorAssetInstaller::set_asset_name(const String &p_asset_name) {
