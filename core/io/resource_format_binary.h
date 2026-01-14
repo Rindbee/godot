@@ -175,8 +175,8 @@ public:
 		RESERVED_FIELDS = 11
 	};
 	Error save(const String &p_path, const Ref<Resource> &p_resource, uint32_t p_flags = 0);
-	Error set_uid(const String &p_path, ResourceUID::ID p_uid);
-	static void write_variant(Ref<FileAccess> r_file, const Variant &p_property, HashMap<Ref<Resource>, int> &r_resource_map, HashMap<Ref<Resource>, int> &r_external_resources, HashMap<StringName, int> &r_string_map, const PropertyInfo &p_hint = PropertyInfo());
+	Error set_info(const String &p_path, ResourceUID::ID p_uid, const String &p_script_class);
+	static void write_variant(Ref<FileAccess> f, const Variant &p_property, HashMap<Ref<Resource>, int> &resource_map, HashMap<Ref<Resource>, int> &external_resources, HashMap<StringName, int> &string_map, const PropertyInfo &p_hint = PropertyInfo());
 };
 
 class ResourceFormatSaverBinary : public ResourceFormatSaver {
@@ -186,6 +186,7 @@ public:
 	static inline ResourceFormatSaverBinary *singleton = nullptr;
 	virtual Error save(const Ref<Resource> &p_resource, const String &p_path, uint32_t p_flags = 0) override;
 	virtual Error set_uid(const String &p_path, ResourceUID::ID p_uid) override;
+	virtual Error set_script_class(const String &p_path, const String &p_script_class) override;
 	virtual bool recognize(const Ref<Resource> &p_resource) const override;
 	virtual void get_recognized_extensions(const Ref<Resource> &p_resource, List<String> *p_extensions) const override;
 

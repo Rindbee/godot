@@ -280,10 +280,12 @@ String ScriptCreateDialog::_validate_path(const String &p_path, bool p_file_must
 	}
 
 	// Check file extension.
+	const String file = p.get_file();
 	bool found = false;
 	bool match = false;
 	for (int l = 0; l < language_menu->get_item_count(); l++) {
-		if (p.has_extension(ScriptServer::get_language(l)->get_extension())) {
+		const String extension = ScriptServer::get_language(l)->get_extension();
+		if (file.right(extension.length() + 1).nocasecmp_to("." + extension) == 0) {
 			found = true;
 			match = l == language_menu->get_selected();
 			break;
