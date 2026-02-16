@@ -175,10 +175,16 @@ class EditorHelp : public VBoxContainer {
 	void _class_desc_resized(bool p_force_update_theme);
 	int display_margin = 0;
 
+	enum MenuItems {
+		MENU_CORRECT_TRANSLATION = RichTextLabel::MENU_MAX + 1,
+	};
+	void _menu_option(int p_option);
+
 	bool bilingual = false;
 	String _combine_to_bilingual(const String &p_string, const String &p_translation, bool p_inline) const;
 	String _format_doc_desc(const String &p_string, bool p_is_native, bool p_inline = true) const;
 	String _format_editor_prompt(const String &p_string) const;
+
 	Error _goto_desc(const String &p_class);
 	//void _update_history_buttons();
 	void _update_method_list(MethodType p_method_type, const Vector<DocData::MethodDoc> &p_methods);
