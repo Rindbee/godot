@@ -30,19 +30,8 @@
 
 #pragma once
 
-#include "core/config/project_settings.h"
-#include "core/io/image_loader.h"
-#include "core/io/marshalls.h"
-#include "core/io/resource_saver.h"
-#include "core/io/zip_io.h"
-#include "core/os/os.h"
-#include "core/version.h"
 #include "editor/export/editor_export_platform.h"
-#include "editor/import/resource_importer_texture_settings.h"
-#include "main/splash.gen.h"
 #include "scene/resources/image_texture.h"
-
-#include <string.h>
 
 class EditorExportPlatformOpenHarmony : public EditorExportPlatform {
 	GDCLASS(EditorExportPlatformOpenHarmony, EditorExportPlatform);
@@ -99,7 +88,7 @@ public:
 
 	virtual List<String> get_binary_extensions(const Ref<EditorExportPreset> &p_preset) const override;
 
-	virtual Error export_project(const Ref<EditorExportPreset> &p_preset, bool p_debug, const String &p_path, BitField<EditorExportPlatform::DebugFlags> p_flags = 0) override;
+	virtual Error export_project(const Ref<EditorExportPreset> &p_preset, bool p_debug, const String &p_path, BitField<EditorExportPlatform::DebugFlags> p_flags = 0, bool p_notify = true) override;
 
 	Error export_project_helper(const Ref<EditorExportPreset> &p_preset, bool p_debug, const String &p_path, bool should_sign, bool export_project_only, BitField<EditorExportPlatform::DebugFlags> p_flags);
 
