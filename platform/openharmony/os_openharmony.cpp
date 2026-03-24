@@ -37,6 +37,7 @@
 #include "main/main.h"
 #include "scene/main/scene_tree.h"
 
+#include <CryptoArchitectureKit/crypto_rand.h>
 #include <hilog/log.h>
 #include <native_drawing/drawing_text_font_descriptor.h>
 #include <native_drawing/drawing_text_typography.h>
@@ -125,6 +126,10 @@ void OS_OpenHarmony::delete_main_loop() {
 }
 
 void OS_OpenHarmony::finalize() {
+	if (crypto_rand) {
+		OH_CryptoRand_Destroy(crypto_rand);
+		crypto_rand = nullptr;
+	}
 }
 
 bool OS_OpenHarmony::_check_internal_feature_support(const String &p_feature) {
@@ -372,6 +377,42 @@ String OS_OpenHarmony::get_system_ca_certificates() {
 	return data;
 }
 
+Error OS_OpenHarmony::get_entropy(uint8_t *r_buffer, int p_bytes) {
+	static bool rand_initialized = false;
+	if (!rand_initialized) {
+		OH_Crypto_ErrCode ret = OH_CryptoRand_Create(&crypto_rand);
+		ERR_FAIL_COND_V(ret != CRYPTO_SUCCESS, FAILED);
+		rand_initialized = true;
+
+		ret = OH_CryptoRand_EnableHardwareEntropy(crypto_rand);
+		if (ret != CRYPTO_SUCCESS) {
+			WARN_PRINT("Failed to enable hardware entropy.");
+		}
+	}
+
+	int left = p_bytes;
+	int ofs = 0;
+	while (left > 0) {
+		Crypto_DataBlob out = { NULL, 0 };
+		OH_Crypto_ErrCode ret = OH_CryptoRand_GenerateRandom(crypto_rand, left, &out);
+		ERR_FAIL_COND_V(ret != CRYPTO_SUCCESS, FAILED);
+
+		if (out.len == 0) {
+			OH_Crypto_FreeDataBlob(&out);
+			ERR_FAIL_V_MSG(FAILED, "CryptoRand returned 0 bytes unexpectedly.");
+		}
+
+		int chunk = MIN(left, (int)out.len);
+		memcpy(r_buffer + ofs, out.data, chunk);
+		left -= chunk;
+		ofs += chunk;
+
+		OH_Crypto_FreeDataBlob(&out);
+	}
+
+	return OK;
+}
+
 void OS_OpenHarmony::main_loop_begin() {
 	if (main_loop) {
 		main_loop->initialize();
@@ -401,7 +442,7 @@ void OS_OpenHarmony::on_focus_out() {
 		is_focused = false;
 
 		if (DisplayServerOpenHarmony::get_singleton()) {
-			DisplayServerOpenHarmony::get_singleton()->send_window_event(DisplayServer::WINDOW_EVENT_FOCUS_OUT);
+			DisplayServerOpenHarmony::get_singleton()->send_window_event(DisplayServerEnums::WINDOW_EVENT_FOCUS_OUT);
 		}
 
 		if (OS::get_singleton()->get_main_loop()) {
@@ -417,7 +458,7 @@ void OS_OpenHarmony::on_focus_in() {
 		is_focused = true;
 
 		if (DisplayServerOpenHarmony::get_singleton()) {
-			DisplayServerOpenHarmony::get_singleton()->send_window_event(DisplayServer::WINDOW_EVENT_FOCUS_IN);
+			DisplayServerOpenHarmony::get_singleton()->send_window_event(DisplayServerEnums::WINDOW_EVENT_FOCUS_IN);
 		}
 
 		if (OS::get_singleton()->get_main_loop()) {
