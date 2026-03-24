@@ -35,13 +35,15 @@
 #include "core/os/main_loop.h"
 #include "drivers/unix/os_unix.h"
 #include "drivers/vulkan/godot_vulkan.h"
-#include "servers/audio_server.h"
+#include "servers/audio/audio_server.h"
 
 struct OH_Drawing_FontDescriptor;
+struct OH_CryptoRand;
 
 class OS_OpenHarmony : public OS_Unix {
 	Size2i display_size;
 	OHNativeWindow *native_window = nullptr;
+	OH_CryptoRand *crypto_rand = nullptr;
 	MainLoop *main_loop = nullptr;
 	AudioDriverOpenHarmony audio_driver;
 	int32_t window_id = -1;
@@ -106,6 +108,7 @@ public:
 	virtual Vector<String> get_system_font_path_for_text(const String &p_font_name, const String &p_text, const String &p_locale = String(), const String &p_script = String(), int p_weight = 400, int p_stretch = 100, bool p_italic = false) const override;
 
 	virtual String get_system_ca_certificates() override;
+	virtual Error get_entropy(uint8_t *r_buffer, int p_bytes) override;
 
 	void main_loop_begin();
 	bool main_loop_iterate();
