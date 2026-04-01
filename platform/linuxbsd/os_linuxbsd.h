@@ -84,6 +84,10 @@ class OS_LinuxBSD : public OS_Unix {
 
 	String system_dir_desktop_cache;
 
+	bool gio_exists = true;
+	bool kioclient5_exists = true;
+	bool gvfs_trash_exists = true;
+
 protected:
 	virtual void initialize() override;
 	virtual void finalize() override;
