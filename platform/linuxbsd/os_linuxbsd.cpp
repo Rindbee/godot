@@ -552,13 +552,15 @@ Error OS_LinuxBSD::shell_open(const String &p_uri) {
 	if (ok == OK) {
 		return OK;
 	}
-	// GNOME
-	args.push_front("open"); // The command is `gio open`, so we need to add it to args
-	ok = create_process("gio", args);
-	if (ok == OK) {
-		return OK;
+	if (gio_exists) {
+		// GNOME
+		args.push_front("open"); // The command is `gio open`, so we need to add it to args
+		ok = create_process("gio", args);
+		if (ok == OK) {
+			return OK;
+		}
+		args.pop_front();
 	}
-	args.pop_front();
 	ok = create_process("gvfs-open", args);
 	if (ok == OK) {
 		return OK;
@@ -1056,25 +1058,31 @@ Error OS_LinuxBSD::move_to_trash(const String &p_path) {
 	List<String> args;
 	args.push_back(path);
 
-	args.push_front("trash"); // The command is `gio trash <file_name>` so we add it before the path.
-	Error result = execute("gio", args, nullptr, &err_code); // For GNOME based machines.
-	if (result == OK && err_code == 0) { // Success.
-		return OK;
+	if (gio_exists) {
+		args.push_front("trash"); // The command is `gio trash <file_name>` so we add it before the path.
+		Error result = execute("gio", args, nullptr, &err_code); // For GNOME based machines.
+		if (result == OK && err_code == 0) { // Success.
+			return OK;
+		}
+		args.pop_front();
 	}
 
-	args.pop_front();
-	args.push_front("move");
-	args.push_back("trash:/"); // The command is `kioclient5 move <file_name> trash:/`.
-	result = execute("kioclient5", args, nullptr, &err_code); // For KDE based machines.
-	if (result == OK && err_code == 0) {
-		return OK;
+	if (kioclient5_exists) {
+		args.push_front("move");
+		args.push_back("trash:/"); // The command is `kioclient5 move <file_name> trash:/`.
+		Error result = execute("kioclient5", args, nullptr, &err_code); // For KDE based machines.
+		if (result == OK && err_code == 0) {
+			return OK;
+		}
+		args.pop_front();
+		args.pop_back();
 	}
 
-	args.pop_front();
-	args.pop_back();
-	result = execute("gvfs-trash", args, nullptr, &err_code); // For older Linux machines.
-	if (result == OK && err_code == 0) {
-		return OK;
+	if (gvfs_trash_exists) {
+		Error result = execute("gvfs-trash", args, nullptr, &err_code); // For older Linux machines.
+		if (result == OK && err_code == 0) {
+			return OK;
+		}
 	}
 
 	// If the commands `kioclient5`, `gio` or `gvfs-trash` don't work on the system we do it manually.
@@ -1344,6 +1352,16 @@ OS_LinuxBSD::OS_LinuxBSD() {
 		}
 	}
 #endif // FONTCONFIG_ENABLED
+
+	int err_code;
+	Error result = execute("which", { "gio" }, nullptr, &err_code);
+	gio_exists = result == OK && err_code == 0;
+
+	result = execute("which", { "kioclient5" }, nullptr, &err_code);
+	kioclient5_exists = result == OK && err_code == 0;
+
+	result = execute("which", { "gvfs-trash" }, nullptr, &err_code);
+	gvfs_trash_exists = result == OK && err_code == 0;
 }
 
 OS_LinuxBSD::~OS_LinuxBSD() {
