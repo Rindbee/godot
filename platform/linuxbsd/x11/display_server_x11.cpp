@@ -2574,6 +2574,11 @@ void DisplayServerX11::_update_wm_state_hints(DisplayServerEnums::WindowID p_win
 	if (supported_atoms.has("_NET_WM_STATE_FOCUSED")) {
 		const bool old_focused = wd.focused;
 		wd.focused = hints.has(supported_atoms["_NET_WM_STATE_FOCUSED"]);
+		if (!wd.focused) {
+			// It needs to be re-acquired in Xwayland.
+			Atom focused_atom = XInternAtom(x11_display, "_NET_WM_STATE_FOCUSED", False);
+			wd.focused = hints.has(focused_atom);
+		}
 		if (old_focused != wd.focused) {
 			_window_focus_changed(p_window);
 		}
