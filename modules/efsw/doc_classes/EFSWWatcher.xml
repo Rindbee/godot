@@ -9,23 +9,14 @@
 		[codeblock]
 		extends Node
 
-		const ACTION_NAMES = ["Add", "Delete", "Modified", "Moved"]
-
 		var listener : EFSWListener
 		var watcher : EFSWWatcher
 
-		# A simple function for handling file actions.
-		func _file_action_handle(watch_id: int, directory: String, filename: String, is_dir: bool, action: EFSWListener.FileAction, old_filename: String) -&gt; void:
-			# Simply output the detected file actions.
-			prints("watch id: %d, dir: %s filename: %s, is dir: %s, action: %s, old_filename: %s" %
-				[watch_id, directory, filename, is_dir, ACTION_NAMES[action-1], old_filename])
-
 		func _enter_tree() -&gt; void:
-			listener = EFSWListener.new()
+			listener = CustomListener.new()
 			watcher = EFSWWatcher.new()
 
-			listener.set_file_action_handler(_file_action_handle) # Sets the callable used to handle file actions.
-			watcher.add_watch("/opt/godot/projects", listener, false) # Adds directory to watch.
+			watcher.add_watch("/opt/godot/projects/", listener, false) # Adds directory to watch.
 			watcher.watch() # Starts watching.
 
 		func _exit_tree() -&gt; void:

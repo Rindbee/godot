@@ -39,7 +39,7 @@ void initialize_efsw_module(ModuleInitializationLevel p_level) {
 		return;
 	}
 
-	GDREGISTER_CLASS(EFSWListener);
+	GDREGISTER_VIRTUAL_CLASS(EFSWListener);
 	GDREGISTER_CLASS(EFSWWatcher);
 }
 

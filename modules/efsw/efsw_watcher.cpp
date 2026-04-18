@@ -36,42 +36,34 @@
 
 class EFSWListenerProxy : public efsw::FileWatchListener {
 private:
-	Callable file_action_handler;
-	Callable missed_file_actions_handler;
+	EFSWListener *target = nullptr;
 
 public:
-	void set_file_action_handler(const Callable &p_handler) {
-		ERR_FAIL_COND(!p_handler.is_valid());
-		file_action_handler = p_handler;
-	}
-
-	void set_missed_file_actions_handler(const Callable &p_handler) {
-		ERR_FAIL_COND(!p_handler.is_valid());
-		missed_file_actions_handler = p_handler;
-	}
-
 	void handleFileAction(efsw::WatchID p_watchid, const std::string &p_dir, const std::string &p_filename, bool p_is_dir, efsw::Actions::Action p_action, std::string p_old_filename) override {
-		if (file_action_handler.is_valid()) {
-			file_action_handler.call(p_watchid, String::utf8(p_dir.c_str()), String::utf8(p_filename.c_str()), p_is_dir, static_cast<EFSWListener::FileAction>(p_action), String::utf8(p_old_filename.c_str()));
+		if (target) {
+			target->_file_action_handle(
+					p_watchid,
+					String(p_dir.c_str()),
+					String(p_filename.c_str()),
+					p_is_dir,
+					static_cast<EFSWListener::FileAction>(p_action),
+					String(p_old_filename.c_str()));
 		}
 	}
 
 	void handleMissedFileActions(efsw::WatchID p_watchid, const std::string &p_dir) override {
-		if (missed_file_actions_handler.is_valid()) {
-			missed_file_actions_handler.call(p_watchid, String::utf8(p_dir.c_str()));
+		if (target) {
+			target->_missed_file_actions_handle(p_watchid, String(p_dir.c_str()));
 		}
 	}
 
-	EFSWListenerProxy() {}
-	~EFSWListenerProxy() {
-		file_action_handler = Callable();
-		missed_file_actions_handler = Callable();
-	}
+	EFSWListenerProxy(EFSWListener *p_target) :
+			target(p_target) {}
 };
 
 void EFSWListener::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("set_file_action_handler", "handler"), &EFSWListener::set_file_action_handler);
-	ClassDB::bind_method(D_METHOD("set_missed_file_actions_handler", "handler"), &EFSWListener::set_missed_file_actions_handler);
+	GDVIRTUAL_BIND(_file_action_handle, "watch_id", "directory", "filename", "is_dir", "action", "old_filename");
+	GDVIRTUAL_BIND(_missed_file_actions_handle, "watch_id", "directory");
 
 	BIND_ENUM_CONSTANT(ACTION_ADD);
 	BIND_ENUM_CONSTANT(ACTION_DELETE);
@@ -79,31 +71,23 @@ void EFSWListener::_bind_methods() {
 	BIND_ENUM_CONSTANT(ACTION_MOVED);
 }
 
-void EFSWListener::set_file_action_handler(const Callable &p_handler) {
-	ERR_FAIL_NULL(proxy);
-	proxy->set_file_action_handler(p_handler);
+void EFSWListener::_file_action_handle(int p_watch_id, const String &p_dir, const String &p_filename, bool p_is_dir, FileAction p_action, const String &p_old_filename) {
+	GDVIRTUAL_CALL(_file_action_handle, p_watch_id, p_dir, p_filename, p_is_dir, p_action, p_old_filename);
 }
 
-void EFSWListener::set_missed_file_actions_handler(const Callable &p_handler) {
-	ERR_FAIL_NULL(proxy);
-	proxy->set_missed_file_actions_handler(p_handler);
+void EFSWListener::_missed_file_actions_handle(int p_watch_id, const String &p_dir) {
+	GDVIRTUAL_CALL(_missed_file_actions_handle, p_watch_id, p_dir);
 }
 
 EFSWListener::EFSWListener() {
-	proxy = memnew(EFSWListenerProxy);
+	proxy = new EFSWListenerProxy(this);
 }
 
 EFSWListener::~EFSWListener() {
 	ERR_FAIL_NULL(proxy);
-	memdelete(proxy);
+	delete proxy;
 	proxy = nullptr;
 }
-
-class EFSWWatcherProxy : public efsw::FileWatcher {
-public:
-	EFSWWatcherProxy(bool force) :
-			efsw::FileWatcher(force) {}
-};
 
 void EFSWWatcher::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("add_watch", "directory", "listener", "recursive"), &EFSWWatcher::add_watch, DEFVAL(true));
@@ -196,11 +180,11 @@ void EFSWWatcher::set_force_generic(bool p_force) {
 	delete proxy;
 
 	force_generic = p_force;
-	proxy = new EFSWWatcherProxy(force_generic);
+	proxy = new efsw::FileWatcher(force_generic);
 }
 
 EFSWWatcher::EFSWWatcher() {
-	proxy = new EFSWWatcherProxy(force_generic);
+	proxy = new efsw::FileWatcher(force_generic);
 }
 
 EFSWWatcher::~EFSWWatcher() {

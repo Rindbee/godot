@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "core/object/gdvirtual.gen.h"
 #include "core/object/object.h"
 #include "core/variant/typed_array.h"
 
@@ -53,12 +54,13 @@ public:
 		ACTION_MOVED = efsw::Actions::Moved, // A file or directory is moved.
 	};
 
-	// The parameter list required for the callable is (int, const String&, const String&, int, const String&).
-	void set_file_action_handler(const Callable &p_handler);
-	// The parameter list required for the callable is (int, const String&).
-	void set_missed_file_actions_handler(const Callable &p_handler);
-
 	EFSWListenerProxy *get_proxy() const { return proxy; }
+
+	virtual void _file_action_handle(int p_watch_id, const String &p_dir, const String &p_filename, bool p_is_dir, FileAction p_action, const String &p_old_filename);
+	virtual void _missed_file_actions_handle(int p_watch_id, const String &p_dir);
+
+	GDVIRTUAL6_REQUIRED(_file_action_handle, int, String, String, bool, FileAction, String);
+	GDVIRTUAL2(_missed_file_actions_handle, int, String);
 
 	EFSWListener();
 	~EFSWListener();
@@ -71,7 +73,7 @@ class EFSWWatcher : public Object {
 
 	bool force_generic = false; // Force the use of generic backend.
 
-	EFSWWatcherProxy *proxy = nullptr;
+	efsw::FileWatcher *proxy = nullptr;
 
 protected:
 	static void _bind_methods();
