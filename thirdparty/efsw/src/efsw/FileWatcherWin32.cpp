@@ -6,6 +6,8 @@
 
 #if EFSW_PLATFORM == EFSW_PLATFORM_WIN32
 
+#include <algorithm>
+
 namespace efsw {
 
 FileWatcherWin32::FileWatcherWin32( FileWatcher* parent ) :
@@ -142,15 +144,24 @@ void FileWatcherWin32::run() {
 			ULONG_PTR compKey = 0;
 			BOOL res = FALSE;
 
-			while ( ( res = GetQueuedCompletionStatus( mIOCP, &numOfBytes, &compKey, &ov,
-													   INFINITE ) ) != FALSE ) {
-				if ( compKey != 0 && compKey == reinterpret_cast<ULONG_PTR>( this ) ) {
+			while ( true ) {
+				res = GetQueuedCompletionStatus( mIOCP, &numOfBytes, &compKey, &ov, 300 );
+
+				purgeExpiredDeletes();
+
+				if ( !res ) {
+					if ( GetLastError() == WAIT_TIMEOUT ) {
+						continue;
+					}
 					break;
-				} else {
-					Lock lock( mWatchesLock );
-					if (mWatches.find( (WatcherStructWin32*)ov ) != mWatches.end())
-						WatchCallback( numOfBytes, ov );
 				}
+
+				if ( compKey != 0 && compKey == reinterpret_cast<ULONG_PTR>( this ) )
+					break;
+
+				Lock lock( mWatchesLock );
+				if ( mWatches.find( (WatcherStructWin32*)ov ) != mWatches.end() )
+					WatchCallback( numOfBytes, ov );
 			}
 		} else {
 			System::sleep( 10 );
@@ -193,6 +204,7 @@ void FileWatcherWin32::handleAction( Watcher* watch, const std::string& filename
 			}
 
 			std::string folderPath( static_cast<WatcherWin32*>( watch )->DirName );
+			std::string realFolderPath = folderPath;
 			std::string realFilename = filename;
 			std::size_t sepPos = filename.find_last_of( "/\\" );
 			std::string oldFolderPath =
@@ -200,19 +212,17 @@ void FileWatcherWin32::handleAction( Watcher* watch, const std::string& filename
 				watch->OldFileName.substr( 0, watch->OldFileName.find_last_of( "/\\" ) );
 
 			if ( sepPos != std::string::npos ) {
-				folderPath +=
+				realFolderPath +=
 					filename.substr( 0, sepPos + 1 < filename.size() ? sepPos + 1 : sepPos );
 				realFilename = filename.substr( sepPos + 1 );
 			}
 
-			if ( folderPath == oldFolderPath ) {
-				watch->Listener->handleFileAction(
-					watch->ID, folderPath, realFilename, isDir, fwAction,
-					FileSystem::fileNameFromPath( watch->OldFileName ) );
+			if ( realFolderPath == oldFolderPath ) {
+				watch->Listener->handleFileAction( watch->ID, realFolderPath, realFilename, isDir,
+												   fwAction, folderPath + watch->OldFileName );
 			} else {
-				watch->Listener->handleFileAction( watch->ID,
-												   static_cast<WatcherWin32*>( watch )->DirName,
-												   filename, isDir, fwAction, watch->OldFileName );
+				watch->Listener->handleFileAction( watch->ID, folderPath, filename, isDir, fwAction,
+												   folderPath + watch->OldFileName );
 			}
 			return;
 		}
@@ -264,6 +274,97 @@ bool FileWatcherWin32::pathInWatches( const std::string& path ) {
 	}
 
 	return false;
+}
+
+std::mutex FileWatcherWin32::sPendingMutex;
+std::vector<PendingDelete> FileWatcherWin32::sPendingDeletes;
+
+void FileWatcherWin32::registerPendingDelete( const PendingDelete& pd ) {
+	std::lock_guard<std::mutex> lock( sPendingMutex );
+	sPendingDeletes.push_back( pd );
+}
+
+bool FileWatcherWin32::tryMatchMove( const FileID& fileID, std::string& outDir,
+									 std::string& outFileName, bool isExtended ) {
+	std::lock_guard<std::mutex> lock( sPendingMutex );
+	auto it = std::find_if( sPendingDeletes.begin(), sPendingDeletes.end(),
+							[&]( const PendingDelete& pd ) {
+								if ( pd.isExtended != isExtended ) {
+									return false;
+								}
+								return isExtended ? pd.fileID.ID.QuadPart == fileID.ID.QuadPart
+												  : pd.fileID.Inode == fileID.Inode;
+							} );
+
+	if ( it != sPendingDeletes.end() ) {
+		outDir = it->dirName;
+		outFileName = it->fileName;
+		sPendingDeletes.erase( it );
+		return true;
+	}
+
+	return false;
+}
+
+void FileWatcherWin32::purgeExpiredDeletes() {
+	if ( sPendingDeletes.empty() ) {
+		return;
+	}
+
+	std::vector<PendingDelete> expired;
+
+	{
+		std::lock_guard<std::mutex> lock( sPendingMutex );
+		auto now = std::chrono::steady_clock::now();
+
+		auto it = sPendingDeletes.begin();
+		while ( it != sPendingDeletes.end() ) {
+			if ( std::chrono::duration_cast<std::chrono::milliseconds>( now - it->timestamp )
+					 .count() < 300 ) {
+				++it;
+			} else {
+				expired.push_back( *it );
+				it = sPendingDeletes.erase( it );
+			}
+		}
+	}
+
+	if ( expired.empty() ) {
+		return;
+	}
+
+	for ( auto& pd : expired ) {
+		WatcherWin32* watcher = NULL;
+		std::string folderPath( pd.dirName );
+		std::string filename( pd.fileName );
+		FileSystem::dirAddSlashAtEnd( folderPath );
+
+		Lock lock( mWatchesLock );
+
+		Watches::iterator iter = mWatches.begin();
+
+		for ( ; iter != mWatches.end(); ++iter ) {
+			if ( folderPath == ( *iter )->Watch->DirName ) {
+				watcher = ( *iter )->Watch;
+				break;
+			}
+		}
+		if ( watcher ) {
+			std::string realFilename = filename;
+			std::size_t sepPos = filename.find_last_of( "/\\" );
+
+			if ( sepPos != std::string::npos ) {
+				folderPath +=
+					filename.substr( 0, sepPos + 1 < filename.size() ? sepPos + 1 : sepPos );
+				realFilename = filename.substr( sepPos + 1 );
+			}
+
+			FileSystem::dirAddSlashAtEnd( folderPath );
+
+			watcher->Listener->handleFileAction( watcher->ID, folderPath, realFilename, pd.isDir,
+												 Actions::Delete );
+		}
+	}
 }
 
 } // namespace efsw
