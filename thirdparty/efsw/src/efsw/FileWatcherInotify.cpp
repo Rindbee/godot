@@ -334,31 +334,15 @@ void FileWatcherInotify::run() {
 						}
 
 						if ( curWatcher ) {
-							handleAction( curWatcher, (char*)pevent->name, IN_ISDIR & pevent->mask,
-										  pevent->mask );
-
+							bool pairProcessed = false;
 							// Check if this is the destination of a move
 							if ( ( pevent->mask & IN_MOVED_TO ) && currentMoveFrom &&
 								 pevent->cookie == currentMoveCookie ) {
+								// OldFileName will be the path, not the filename.
+								curWatcher->OldFileName =
+									currentMoveFrom->Directory + currentMoveFrom->OldFileName;
 
-								// If the move happened between TWO DIFFERENT watched directories
-								if ( curWatcher != currentMoveFrom ) {
-									// We need to simulate a delete event, the IN_MOVED_TO will
-									// generate an add event after
-									handleAction( currentMoveFrom, currentMoveFrom->OldFileName,
-												  IN_ISDIR & pevent->mask, IN_DELETE );
-
-									// Clear the state on the source watcher so it doesn't
-									// get processed again or stuck with stale data.
-									currentMoveFrom->OldFileName = "";
-								}
-								// Else: If curWatcher == currentMoveFrom, it's a local rename.
-								// handleAction() above already detected the OldFileName and
-								// emitted a 'Moved' event correctly.
-
-								/// Pair processed successfully
-								currentMoveFrom = NULL;
-								currentMoveCookie = -1;
+								pairProcessed = true;
 							} else if ( pevent->mask & IN_MOVED_FROM ) {
 								// Previous event was moved from and current event is moved from
 								// Treat it as a DELETE or moved outside watches
@@ -392,7 +376,13 @@ void FileWatcherInotify::run() {
 												 prevOldFileName.c_str() );
 									}
 								}
+								pairProcessed = true;
+							}
 
+							handleAction( curWatcher, (char*)pevent->name, IN_ISDIR & pevent->mask,
+										  pevent->mask );
+
+							if ( pairProcessed ) {
 								currentMoveFrom = NULL;
 								currentMoveCookie = -1;
 							}
@@ -575,12 +565,13 @@ void FileWatcherInotify::handleAction( Watcher* watch, const std::string& filena
 
 			watch->Listener->handleFileAction( watch->ID, watch->Directory, filename, isDir,
 											   Actions::Modified );
-
-			checkForNewWatcher( watch, fpath );
 		} else {
 			watch->Listener->handleFileAction( watch->ID, watch->Directory, filename, isDir,
 											   Actions::Moved, watch->OldFileName );
 		}
+
+		if ( isDir )
+			checkForNewWatcher( watch, fpath );
 
 		if ( watch->Recursive && isDir && !watch->OldFileName.empty() ) {
 			/// Update the new directory path

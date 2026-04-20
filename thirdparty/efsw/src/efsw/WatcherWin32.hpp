@@ -35,6 +35,20 @@ struct sLastModifiedEvent {
 	std::string fileName;
 };
 
+union FileID {
+	LARGE_INTEGER ID;
+	Uint64 Inode;
+};
+
+struct PendingDelete {
+	bool isExtended;
+	FileID fileID;
+	std::string fileName;
+	std::string dirName;
+	bool isDir;
+	std::chrono::steady_clock::time_point timestamp;
+};
+
 RefreshResult RefreshWatch( WatcherStructWin32* pWatch );
 
 void CALLBACK WatchCallback( DWORD dwNumberOfBytesTransfered, LPOVERLAPPED lpOverlapped );

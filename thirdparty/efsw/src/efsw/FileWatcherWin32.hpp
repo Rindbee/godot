@@ -44,6 +44,11 @@ class FileWatcherWin32 : public FileWatcherImpl {
 	/// @return Returns a list of the directories that are being watched
 	std::vector<std::string> directories() override;
 
+	static void registerPendingDelete( const PendingDelete& pd );
+	static bool tryMatchMove( const FileID& fileID, std::string& outDir, std::string& outFileName,
+							  bool isExtended = true );
+	void purgeExpiredDeletes();
+
   protected:
 	HANDLE mIOCP;
 	Watches mWatches;
@@ -62,6 +67,9 @@ class FileWatcherWin32 : public FileWatcherImpl {
 
   private:
 	void run();
+
+	static std::mutex sPendingMutex;
+	static std::vector<PendingDelete> sPendingDeletes;
 };
 
 } // namespace efsw

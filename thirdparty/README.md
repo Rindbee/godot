@@ -229,6 +229,7 @@ Files extracted from upstream source:
 Patches:
 
 - `0001-check-if-is-dir.patch` ([GH-118641](https://github.com/godotengine/godot/pull/118641))
+- `0002-allow-cross-directory-moves.patch` ([GH-118641](https://github.com/godotengine/godot/pull/118641))
 
 
 ## embree
