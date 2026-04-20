@@ -31,8 +31,8 @@ class FileWatcherImpl {
 	virtual void watch() = 0;
 
 	/// Handles the action
-	virtual void handleAction( Watcher* watch, const std::string& filename, unsigned long action,
-							   std::string oldFilename = "" ) = 0;
+	virtual void handleAction( Watcher* watch, const std::string& filename, bool isDir,
+							   unsigned long action, std::string oldFilename = "" ) = 0;
 
 	/// @return Returns a list of the directories that are being watched
 	virtual std::vector<std::string> directories() = 0;

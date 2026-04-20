@@ -160,7 +160,7 @@ void FileWatcherWin32::run() {
 	removeAllWatches();
 }
 
-void FileWatcherWin32::handleAction( Watcher* watch, const std::string& filename,
+void FileWatcherWin32::handleAction( Watcher* watch, const std::string& filename, bool isDir,
 									 unsigned long action, std::string /*oldFilename*/ ) {
 	Action fwAction;
 
@@ -177,7 +177,7 @@ void FileWatcherWin32::handleAction( Watcher* watch, const std::string& filename
 			std::string fpath( watch->Directory + filename );
 
 			// Update the directory path
-			if ( watch->Recursive && FileSystem::isDirectory( fpath ) ) {
+			if ( watch->Recursive && isDir ) {
 				// Update the new directory path
 				std::string opath( watch->Directory + watch->OldFileName );
 				FileSystem::dirAddSlashAtEnd( opath );
@@ -207,12 +207,12 @@ void FileWatcherWin32::handleAction( Watcher* watch, const std::string& filename
 
 			if ( folderPath == oldFolderPath ) {
 				watch->Listener->handleFileAction(
-					watch->ID, folderPath, realFilename, fwAction,
+					watch->ID, folderPath, realFilename, isDir, fwAction,
 					FileSystem::fileNameFromPath( watch->OldFileName ) );
 			} else {
 				watch->Listener->handleFileAction( watch->ID,
 												   static_cast<WatcherWin32*>( watch )->DirName,
-												   filename, fwAction, watch->OldFileName );
+												   filename, isDir, fwAction, watch->OldFileName );
 			}
 			return;
 		}
@@ -237,7 +237,7 @@ void FileWatcherWin32::handleAction( Watcher* watch, const std::string& filename
 
 	FileSystem::dirAddSlashAtEnd( folderPath );
 
-	watch->Listener->handleFileAction( watch->ID, folderPath, realFilename, fwAction );
+	watch->Listener->handleFileAction( watch->ID, folderPath, realFilename, isDir, fwAction );
 }
 
 std::vector<std::string> FileWatcherWin32::directories() {

@@ -48,7 +48,7 @@ class DirWatcherGeneric {
 
 	void resetDirectory( std::string directory );
 
-	void handleAction( const std::string& filename, unsigned long action,
+	void handleAction( const std::string& filename, bool isDir, unsigned long action,
 					   std::string oldFilename = "" );
 };
 

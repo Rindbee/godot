@@ -122,7 +122,7 @@ enum efsw_option {
 
 /// Basic interface for listening for file events.
 typedef void ( *efsw_pfn_fileaction_callback )( efsw_watcher watcher, efsw_watchid watchid,
-												const char* dir, const char* filename,
+												const char* dir, const char* filename, bool isDir,
 												enum efsw_action action, const char* old_filename,
 												void* param );
 

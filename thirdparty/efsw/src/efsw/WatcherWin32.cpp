@@ -86,7 +86,9 @@ void WatchCallbackOld( WatcherWin32* pWatch ) {
 		}
 
 		if ( !skip ) {
-			pWatch->Watch->handleAction( pWatch, nfile, pNotify->Action );
+			pWatch->Watch->handleAction(
+				pWatch, nfile, FileSystem::isDirectory( std::string( pWatch->DirName ) + nfile ),
+				pNotify->Action );
 		}
 	} while ( pNotify->NextEntryOffset != 0 );
 }
@@ -139,15 +141,21 @@ void WatchCallbackEx( WatcherWin32* pWatch ) {
 			}
 
 			if ( oldFile.empty() ) {
-				pWatch->Watch->handleAction( pWatch, nfile, FILE_ACTION_ADDED );
+				pWatch->Watch->handleAction( pWatch, nfile,
+											 pNotify->FileAttributes & FILE_ATTRIBUTE_DIRECTORY,
+											 FILE_ACTION_ADDED );
 				skip = true;
 			} else {
-				pWatch->Watch->handleAction( pWatch, oldFile, FILE_ACTION_RENAMED_OLD_NAME );
+				pWatch->Watch->handleAction( pWatch, oldFile,
+											 pNotify->FileAttributes & FILE_ATTRIBUTE_DIRECTORY,
+											 FILE_ACTION_RENAMED_OLD_NAME );
 			}
 		}
 
 		if ( !skip ) {
-			pWatch->Watch->handleAction( pWatch, nfile, pNotify->Action );
+			pWatch->Watch->handleAction( pWatch, nfile,
+										 pNotify->FileAttributes & FILE_ATTRIBUTE_DIRECTORY,
+										 pNotify->Action );
 		}
 	} while ( pNotify->NextEntryOffset != 0 );
 }

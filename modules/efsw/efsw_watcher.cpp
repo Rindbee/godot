@@ -50,9 +50,9 @@ public:
 		missed_file_actions_handler = p_handler;
 	}
 
-	void handleFileAction(efsw::WatchID p_watchid, const std::string &p_dir, const std::string &p_filename, efsw::Actions::Action p_action, std::string p_old_filename) override {
+	void handleFileAction(efsw::WatchID p_watchid, const std::string &p_dir, const std::string &p_filename, bool p_is_dir, efsw::Actions::Action p_action, std::string p_old_filename) override {
 		if (file_action_handler.is_valid()) {
-			file_action_handler.call(p_watchid, String::utf8(p_dir.c_str()), String::utf8(p_filename.c_str()), static_cast<EFSWListener::FileAction>(p_action), String::utf8(p_old_filename.c_str()));
+			file_action_handler.call(p_watchid, String::utf8(p_dir.c_str()), String::utf8(p_filename.c_str()), p_is_dir, static_cast<EFSWListener::FileAction>(p_action), String::utf8(p_old_filename.c_str()));
 		}
 	}
 

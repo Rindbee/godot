@@ -248,7 +248,7 @@ class FileWatchListener {
 	/// @param action Action that was performed
 	/// @param oldFilename The name of the file or directory moved
 	virtual void handleFileAction( WatchID watchid, const std::string& dir,
-								   const std::string& filename, Action action,
+								   const std::string& filename, bool isDir, Action action,
 								   std::string oldFilename = "" ) = 0;
 
 	/// Handles that have missed file actions

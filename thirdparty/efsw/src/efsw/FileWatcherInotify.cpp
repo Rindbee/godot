@@ -167,7 +167,8 @@ WatchID FileWatcherInotify::addWatch( const std::string& directory, FileWatchLis
 					 file.second.isLink() ) {
 					pWatch->Listener->handleFileAction(
 						pWatch->ID, pWatch->Directory,
-						FileSystem::fileNameFromPath( file.second.Filepath ), Actions::Add );
+						FileSystem::fileNameFromPath( file.second.Filepath ),
+						file.second.isDirectory(), Actions::Add );
 				}
 			}
 		}
@@ -333,7 +334,8 @@ void FileWatcherInotify::run() {
 						}
 
 						if ( curWatcher ) {
-							handleAction( curWatcher, (char*)pevent->name, pevent->mask );
+							handleAction( curWatcher, (char*)pevent->name, IN_ISDIR & pevent->mask,
+										  pevent->mask );
 
 							// Check if this is the destination of a move
 							if ( ( pevent->mask & IN_MOVED_TO ) && currentMoveFrom &&
@@ -344,7 +346,7 @@ void FileWatcherInotify::run() {
 									// We need to simulate a delete event, the IN_MOVED_TO will
 									// generate an add event after
 									handleAction( currentMoveFrom, currentMoveFrom->OldFileName,
-												  IN_DELETE );
+												  IN_ISDIR & pevent->mask, IN_DELETE );
 
 									// Clear the state on the source watcher so it doesn't
 									// get processed again or stuck with stale data.
@@ -497,7 +499,9 @@ void FileWatcherInotify::run() {
 								  } );
 
 				if ( eraseWatches.empty() ) {
-					handleAction( watch, oldFileName, IN_DELETE );
+					handleAction( watch, oldFileName,
+								  FileSystem::isDirectory( watch->Directory + oldFileName ),
+								  IN_DELETE );
 				} else {
 					for ( std::vector<Watcher*>::reverse_iterator eit = eraseWatches.rbegin();
 						  eit != eraseWatches.rend(); ++eit ) {
@@ -506,7 +510,7 @@ void FileWatcherInotify::run() {
 						/// Create Delete event for removed watches that have been moved too
 						if ( Watcher* cntWatch = watcherContainsDirectory( rmWatch->Directory ) ) {
 							handleAction( cntWatch,
-										  FileSystem::fileNameFromPath( rmWatch->Directory ),
+										  FileSystem::fileNameFromPath( rmWatch->Directory ), true,
 										  IN_DELETE );
 						}
 					}
@@ -547,7 +551,7 @@ void FileWatcherInotify::checkForNewWatcher( Watcher* watch, std::string fpath )
 	}
 }
 
-void FileWatcherInotify::handleAction( Watcher* watch, const std::string& filename,
+void FileWatcherInotify::handleAction( Watcher* watch, const std::string& filename, bool isDir,
 									   unsigned long action, std::string ) {
 	if ( !watch || !watch->Listener || !mInitOK ) {
 		return;
@@ -560,25 +564,25 @@ void FileWatcherInotify::handleAction( Watcher* watch, const std::string& filena
 	if ( IN_Q_OVERFLOW & action ) {
 		watch->Listener->handleMissedFileActions( watch->ID, watch->Directory );
 	} else if ( ( IN_CLOSE_WRITE & action ) || ( IN_MODIFY & action ) ) {
-		watch->Listener->handleFileAction( watch->ID, watch->Directory, filename,
+		watch->Listener->handleFileAction( watch->ID, watch->Directory, filename, isDir,
 										   Actions::Modified );
 	} else if ( IN_MOVED_TO & action ) {
 		/// If OldFileName doesn't exist means that the file has been moved from other folder, so we
 		/// just send the Add event
 		if ( watch->OldFileName.empty() ) {
-			watch->Listener->handleFileAction( watch->ID, watch->Directory, filename,
+			watch->Listener->handleFileAction( watch->ID, watch->Directory, filename, isDir,
 											   Actions::Add );
 
-			watch->Listener->handleFileAction( watch->ID, watch->Directory, filename,
+			watch->Listener->handleFileAction( watch->ID, watch->Directory, filename, isDir,
 											   Actions::Modified );
 
 			checkForNewWatcher( watch, fpath );
 		} else {
-			watch->Listener->handleFileAction( watch->ID, watch->Directory, filename,
+			watch->Listener->handleFileAction( watch->ID, watch->Directory, filename, isDir,
 											   Actions::Moved, watch->OldFileName );
 		}
 
-		if ( watch->Recursive && FileSystem::isDirectory( fpath ) && !watch->OldFileName.empty() ) {
+		if ( watch->Recursive && isDir && !watch->OldFileName.empty() ) {
 			/// Update the new directory path
 			std::string opath( watch->Directory + watch->OldFileName );
 			FileSystem::dirAddSlashAtEnd( opath );
@@ -599,13 +603,15 @@ void FileWatcherInotify::handleAction( Watcher* watch, const std::string& filena
 
 		watch->OldFileName = "";
 	} else if ( IN_CREATE & action ) {
-		watch->Listener->handleFileAction( watch->ID, watch->Directory, filename, Actions::Add );
+		watch->Listener->handleFileAction( watch->ID, watch->Directory, filename, isDir,
+										   Actions::Add );
 
 		checkForNewWatcher( watch, fpath );
 	} else if ( IN_MOVED_FROM & action ) {
 		watch->OldFileName = filename;
 	} else if ( IN_DELETE & action ) {
-		watch->Listener->handleFileAction( watch->ID, watch->Directory, filename, Actions::Delete );
+		watch->Listener->handleFileAction( watch->ID, watch->Directory, filename, isDir,
+										   Actions::Delete );
 
 		FileSystem::dirAddSlashAtEnd( fpath );
 
