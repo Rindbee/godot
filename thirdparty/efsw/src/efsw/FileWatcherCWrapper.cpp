@@ -21,9 +21,9 @@ class Watcher_CAPI : public efsw::FileWatchListener {
 		mWatcher( watcher ), mFn( fn ), mParam( param ), mFnMissedFa( fnfa ) {}
 
 	void handleFileAction( efsw::WatchID watchid, const std::string& dir,
-						   const std::string& filename, efsw::Action action,
+						   const std::string& filename, bool isDir, efsw::Action action,
 						   std::string oldFilename = "" ) {
-		mFn( mWatcher, watchid, dir.c_str(), filename.c_str(), (enum efsw_action)action,
+		mFn( mWatcher, watchid, dir.c_str(), filename.c_str(), isDir, (enum efsw_action)action,
 			 oldFilename.c_str(), mParam );
 	}
 

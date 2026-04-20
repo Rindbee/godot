@@ -199,7 +199,7 @@ void WatcherKqueue::addFile( const std::string& name, bool emitEvents ) {
 
 	// handle action
 	if ( emitEvents ) {
-		handleAction( name, Actions::Add );
+		handleAction( name, false, Actions::Add );
 	}
 }
 
@@ -229,7 +229,7 @@ void WatcherKqueue::removeFile( const std::string& name, bool emitEvents ) {
 
 	// handle action
 	if ( emitEvents ) {
-		handleAction( name, Actions::Delete );
+		handleAction( name, false, Actions::Delete );
 	}
 
 	// Delete the user data ( FileInfo ) from the kevent closed
@@ -269,7 +269,7 @@ void WatcherKqueue::rescan() {
 		}
 
 		DiffIterator( FilesModified ) {
-			handleAction( ( *it ).Filepath, Actions::Modified );
+			handleAction( ( *it ).Filepath, false, Actions::Modified );
 		}
 
 		DiffIterator( FilesDeleted ) {
@@ -277,7 +277,7 @@ void WatcherKqueue::rescan() {
 		}
 
 		DiffMovedIterator( FilesMoved ) {
-			handleAction( ( *mit ).second.Filepath, Actions::Moved, ( *mit ).first );
+			handleAction( ( *mit ).second.Filepath, false, Actions::Moved, ( *mit ).first );
 			removeFile( Directory + ( *mit ).first, false );
 			addFile( ( *mit ).second.Filepath, false );
 		}
@@ -318,23 +318,24 @@ WatchID WatcherKqueue::watchingDirectory( std::string dir ) {
 	return Errors::FileNotFound;
 }
 
-void WatcherKqueue::handleAction( const std::string& filename, efsw::Action action,
+void WatcherKqueue::handleAction( const std::string& filename, bool isDir, efsw::Action action,
 								  const std::string& oldFilename ) {
-	Listener->handleFileAction( ID, Directory, FileSystem::fileNameFromPath( filename ), action,
-								FileSystem::fileNameFromPath( oldFilename ) );
+	Listener->handleFileAction( ID, Directory, FileSystem::fileNameFromPath( filename ), isDir,
+								action, FileSystem::fileNameFromPath( oldFilename ) );
 }
 
 void WatcherKqueue::handleFolderAction( std::string filename, efsw::Action action,
 										const std::string& oldFilename ) {
 	FileSystem::dirRemoveSlashAtEnd( filename );
 
-	handleAction( filename, action, oldFilename );
+	handleAction( filename, true, action, oldFilename );
 }
 
 void WatcherKqueue::sendDirChanged() {
 	if ( NULL != mParent ) {
 		Listener->handleFileAction( mParent->ID, mParent->Directory,
-									FileSystem::fileNameFromPath( Directory ), Actions::Modified );
+									FileSystem::fileNameFromPath( Directory ), true,
+									Actions::Modified );
 	}
 }
 
@@ -389,7 +390,8 @@ void WatcherKqueue::watch() {
 
 						mDirSnap.updateFile( entry->Filepath );
 
-						handleAction( entry->Filepath, efsw::Actions::Modified );
+						handleAction( entry->Filepath, entry->isDirectory(),
+									  efsw::Actions::Modified );
 					}
 				} else if ( event.fflags & NOTE_RENAME ) {
 					efDEBUG( "moved\n" );

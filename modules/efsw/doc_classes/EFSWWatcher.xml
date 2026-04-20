@@ -15,10 +15,10 @@
 		var watcher : EFSWWatcher
 
 		# A simple function for handling file actions.
-		func _file_action_handle(watch_id: int, directory: String, filename: String, action: EFSWListener.FileAction, old_filename: String) -&gt; void:
+		func _file_action_handle(watch_id: int, directory: String, filename: String, is_dir: bool, action: EFSWListener.FileAction, old_filename: String) -&gt; void:
 			# Simply output the detected file actions.
-			prints("watch id: %d, dir: %s filename: %s, action: %s, old_filename: %s" %
-				[watch_id, directory, filename, ACTION_NAMES[action-1], old_filename])
+			prints("watch id: %d, dir: %s filename: %s, is dir: %s, action: %s, old_filename: %s" %
+				[watch_id, directory, filename, is_dir, ACTION_NAMES[action-1], old_filename])
 
 		func _enter_tree() -&gt; void:
 			listener = EFSWListener.new()
