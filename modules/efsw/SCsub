@@ -11,6 +11,9 @@ else:
 
 env_efsw = env_modules.Clone()
 
+env_efsw.Append(CPPDEFINES=["DEBUG"])
+env_efsw.Append(CPPDEFINES=["EFSW_VERBOSE"])
+
 # Thirdparty source files
 
 thirdparty_obj = []
