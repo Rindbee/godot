@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FileWatcher" inherits="RefCounted" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+		Provides methods for watching files and directories.
+	</brief_description>
+	<description>
+		Listens to files and directories, and dispatches events to notify listeners of changes to files and directories.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="add_watch">
+			<return type="int" />
+			<param index="0" name="directory" type="String" />
+			<param index="1" name="listener" type="FileListener" />
+			<param index="2" name="recursive" type="bool" default="true" />
+			<description>
+				Adds a watch for [param directory]. On success, returns a positive [int] that can be used in [method remove_watch_by_id]; otherwise, returns a [enum WatcherError].
+				If [param recursive] is [code]true[/code], the subdirectories within the [param directory] will be automatically watched recursively.
+				File change events in the directory will be listened to and handled by [param listener].
+				[b]Note:[/b] For directories where watches are added automatically, it is still possible to add watches manually.
+			</description>
+		</method>
+		<method name="create" qualifiers="static">
+			<return type="FileWatcher" />
+			<description>
+				Attempts to create and return an OS-specific file watcher instance.
+				[b]Note:[/b] Returns [code]null[/code] if the file watcher is not implemented on the host platform.
+			</description>
+		</method>
+		<method name="get_watch_directories" qualifiers="const">
+			<return type="String[]" />
+			<description>
+				Returns a list of directories that were manually added for watching.
+			</description>
+		</method>
+		<method name="poll_events">
+			<return type="void" />
+			<description>
+				Used to poll events in the main thread.
+				[b]Note:[/b] This only works in builds where threading support is not enabled.
+			</description>
+		</method>
+		<method name="remove_watch_by_id">
+			<return type="void" />
+			<param index="0" name="watch_id" type="int" />
+			<description>
+				Removes the directory watch specified by [param watch_id], which was previously returned by [method add_watch].
+			</description>
+		</method>
+		<method name="remove_watch_by_path">
+			<return type="void" />
+			<param index="0" name="directory" type="String" />
+			<description>
+				Removes the [param directory]'s watch.
+			</description>
+		</method>
+		<method name="stop_watch">
+			<return type="void" />
+			<description>
+				Stops the background watching thread.
+				[b]Note:[/b] This does not clear the added watches.
+			</description>
+		</method>
+		<method name="watch">
+			<return type="void" />
+			<description>
+				Starts watching.
+				[b]Note:[/b] If threading support is enabled in the build, this will be executed in a separate thread; otherwise, it will also need to call the [method poll_events] method periodically.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="allow_out_of_scope_links" type="bool" setter="set_allow_out_of_scope_links" getter="is_allowing_out_of_scope_links" default="false">
+			Whether to allow symlinks to watch recursively out of the manual watched directory. [member follow_symlinks] must be enabled for this to work.
+		</member>
+		<member name="deduplicated" type="bool" setter="set_deduplicated" getter="is_deduplicated" default="true">
+			When enabled, consecutive [constant FileListener.ACTION_MODIFIED] events for the same file within a single event batch will be merged into a single callback to reduce overhead.
+		</member>
+		<member name="follow_symlinks" type="bool" setter="set_follow_symlinks" getter="is_following_symlinks" default="false">
+			Whether to allow recursive watchers to follow symbolic links to other directories.
+			[b]Note:[/b] Directories manually added by `[method add_watch]` are not subject to this property.
+		</member>
+		<member name="skip_fs_type_check" type="bool" setter="set_skip_fs_type_check" getter="is_skipping_fs_type_check" default="false">
+			Whether to skip file system checks on recursive subdirectories.
+			[b]Note:[/b] Enable to skip checks if you are certain that different file systems are not mounted under the directories being watched.
+		</member>
+	</members>
+	<constants>
+		<constant name="NO_WATCH_ERROR" value="0" enum="WatcherError">
+			No error.
+		</constant>
+		<constant name="UNAVAILABLE_WATCHER" value="-1" enum="WatcherError">
+			The FileWatcher is not yet available.
+		</constant>
+		<constant name="INVALID_LISTENER" value="-2" enum="WatcherError">
+			The file listener being used is invalid.
+		</constant>
+		<constant name="DIR_NOT_FOUND" value="-3" enum="WatcherError">
+			The directory to be watched does not exist or is inaccessible.
+		</constant>
+		<constant name="DIR_NOT_READABLE" value="-4" enum="WatcherError">
+			The directory to be watched lacks read permissions.
+		</constant>
+		<constant name="DIR_ALREADY_WATCHED" value="-5" enum="WatcherError">
+			The directory to be watched has already been manually added for watching.
+		</constant>
+		<constant name="FS_UNSUPPORTED" value="-6" enum="WatcherError">
+			The directory to be watched is in a unsupported file system.
+		</constant>
+		<constant name="WATCH_FAILED" value="-7" enum="WatcherError">
+			File system watcher failed to watch for changes.
+		</constant>
+		<constant name="FOLLOW_LINK_NOT_ALLOWED" value="-8" enum="WatcherError">
+			[member follow_symlinks] is disabled.
+		</constant>
+		<constant name="OUT_OF_SCOPE" value="-9" enum="WatcherError">
+			The symlink points outside the allowed watch scope.
+		</constant>
+	</constants>
+</class>
