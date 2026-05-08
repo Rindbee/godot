@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FileListener" inherits="RefCounted" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+		A class that provides callback methods for handling events of files and directories that are being watched.
+	</brief_description>
+	<description>
+		Used to wrap [Callable] as callback methods, which are used to customize filtering rules or handle file actions.
+		[b]Note:[/b] These callbacks will be called in a separate thread, so please ensure thread safety.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="set_event_filter">
+			<return type="void" />
+			<param index="0" name="filter" type="Callable" />
+			<description>
+				Sets the [Callable] for customizing whether file events are filtered out.
+				[param filter] needs to return a [bool] value to determine whether to filter out events for the file, and also needs to accept the following arguments in order:
+				[code skip-lint]int[/code]: The watch ID of the directory manually added by [method FileWatcher.add_watch];
+				[code skip-lint]String[/code]: The base directory path of the file or directory to be filtered;
+				[code skip-lint]String[/code]: The file or directory's name to be filtered;
+				[code skip-lint]int[/code]: A bitmask of [enum FileTypeFlags] indicating the type of the file or directory.
+				[b]Note:[/b] This callback will be called in a separate thread, so please ensure thread safety.
+			</description>
+		</method>
+		<method name="set_file_action_handler">
+			<return type="void" />
+			<param index="0" name="handler" type="Callable" />
+			<description>
+				Sets the [Callable] to listen for and handle file actions.
+				[param handler] needs to accept the following arguments in order:
+				[code skip-lint]int[/code]: The watch ID of the directory manually added by [method FileWatcher.add_watch];
+				[code skip-lint]String[/code]: The path to the parent directory of the file or directory that generated the file action;
+				[code skip-lint]String[/code]: The filename of the file or directory that generated the file action;
+				[code skip-lint]int[/code]: A bitmask of [enum FileTypeFlags] indicating the type of the file or directory;
+				[code skip-lint]int[/code]: The [enum FileAction] that was performed;
+				[code skip-lint]String[/code]: The old path of the file or directory moved.
+				[b]Note:[/b] This callback will be called in a separate thread, so please ensure thread safety.
+			</description>
+		</method>
+		<method name="set_missing_file_actions_handler">
+			<return type="void" />
+			<param index="0" name="handler" type="Callable" />
+			<description>
+				Sets the [Callable] to handle the behavior when file actions are lost due to the file system monitoring queue overflows.
+				[param handler] needs to accept the following arguments in order:
+				[code skip-lint]int[/code]: The watch ID of the directory manually added by [method FileWatcher.add_watch];
+				[code skip-lint]String[/code]: The path of the watched directory.
+				[b]Note:[/b] This callback will be called in a separate thread, so please ensure thread safety.
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="ACTION_ADD" value="1" enum="FileAction">
+			A file or directory is created or moved in from outside the scope.
+		</constant>
+		<constant name="ACTION_DELETE" value="2" enum="FileAction">
+			A file or directory is deleted or moved out of scope.
+		</constant>
+		<constant name="ACTION_MODIFIED" value="3" enum="FileAction">
+			A file or directory is modified.
+		</constant>
+		<constant name="ACTION_MOVED" value="4" enum="FileAction">
+			A file or directory is moved.
+		</constant>
+		<constant name="IS_DIR" value="1" enum="FileTypeFlags">
+			Whether it is a directory or points to a valid directory.
+		</constant>
+		<constant name="IS_LINK" value="2" enum="FileTypeFlags">
+			Whether it is a symlink.
+		</constant>
+	</constants>
+</class>

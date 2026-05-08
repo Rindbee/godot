@@ -44,6 +44,10 @@
 #include "drivers/unix/net_socket_unix.h"
 #endif
 
+#ifdef __linux__
+#include "drivers/unix/file_watcher_inotify.h"
+#endif // __linux__
+
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>
 #include <mach/host_info.h>
@@ -175,6 +179,10 @@ void OS_Unix::initialize_core() {
 	DirAccess::make_default<DirAccessUnix>(DirAccess::ACCESS_RESOURCES);
 	DirAccess::make_default<DirAccessUnix>(DirAccess::ACCESS_USERDATA);
 	DirAccess::make_default<DirAccessUnix>(DirAccess::ACCESS_FILESYSTEM);
+
+#ifdef __linux__
+	FileWatcherInotify::make_default();
+#endif // __linux__
 
 #ifndef UNIX_SOCKET_UNAVAILABLE
 	NetSocketUnix::make_default();

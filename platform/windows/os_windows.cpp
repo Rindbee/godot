@@ -45,6 +45,7 @@
 #include "drivers/windows/dir_access_windows.h"
 #include "drivers/windows/file_access_windows.h"
 #include "drivers/windows/file_access_windows_pipe.h"
+#include "drivers/windows/file_watcher_iocp.h"
 #include "drivers/windows/ip_windows.h"
 #include "drivers/windows/net_socket_winsock.h"
 #include "drivers/windows/thread_windows.h"
@@ -286,6 +287,8 @@ void OS_Windows::initialize() {
 	DirAccess::make_default<DirAccessWindows>(DirAccess::ACCESS_RESOURCES);
 	DirAccess::make_default<DirAccessWindows>(DirAccess::ACCESS_USERDATA);
 	DirAccess::make_default<DirAccessWindows>(DirAccess::ACCESS_FILESYSTEM);
+
+	FileWatcherIOCP::make_default();
 
 	NetSocketWinSock::make_default();
 
