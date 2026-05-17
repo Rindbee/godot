@@ -597,6 +597,16 @@ String DirAccessUnix::get_filesystem_type() const {
 			return "FUSE";
 		case 0xca451a4e:
 			return "BCACHEFS";
+		case 0x1badface:
+			return "BFS";
+		case 0x00004244:
+			return "HFS";
+		case 0x0000482b:
+			return "HFSPLUS";
+		case 0x3153464a:
+			return "JFS";
+		case 0x0000138f:
+			return "MINIX";
 		case 0x00004d44:
 			return "FAT32";
 		case 0x2011bab0:
@@ -621,6 +631,8 @@ String DirAccessUnix::get_filesystem_type() const {
 			return "SMB";
 		case 0xff534d42:
 			return "CIFS";
+		case 0xfe534d42:
+			return "SMB2";
 		case 0x0027e0eb:
 			return "CGROUP";
 		case 0x63677270:
@@ -678,7 +690,7 @@ String DirAccessUnix::get_filesystem_type() const {
 		case 0x50494446:
 			return "PID_FS";
 		default:
-			return "";
+			return vformat("0x%08x", fs.f_type);
 	}
 #else
 	return ""; //TODO this should be implemented
