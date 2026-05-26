@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/io/dir_access.h"
+#include "core/io/file_watcher.h"
 #include "core/io/resource_loader_constants.h"
 #include "core/os/semaphore.h"
 #include "core/os/thread.h"
@@ -272,6 +273,13 @@ class EditorFileSystem : public Node {
 	void _file_info_update(EditorFileInfo *p_file, const String &p_path);
 
 	int _dir_info_remove(EditorFileSystemDirectory *p_dir, const String &p_path, const int p_idx);
+
+	HashSet<String> ignored_dirs;
+	Ref<FileWatcher> watcher;
+
+	bool _file_event_filter(WatchID p_id, const String &p_dir_path, const String &p_filename, int p_type);
+	bool _file_action_handle(WatchID p_id, const String &p_dir_path, const String &p_filename, int p_type, FileListener::FileAction p_action, const String &p_old_path);
+	void _missing_actions_handle(WatchID p_id, const String &p_path);
 
 	void _scan_filesystem();
 	void _first_scan_filesystem();

@@ -1593,7 +1593,23 @@ void EditorFileSystem::scan() {
 			}
 		}
 #endif
+
+		watcher = FileWatcher::create();
+		if (watcher.is_valid()) {
+			Ref<FileListener> listener;
+			listener.instantiate();
+			listener->set_event_filter(callable_mp(this, &EditorFileSystem::_file_event_filter));
+			listener->set_file_action_handler(callable_mp(this, &EditorFileSystem::_file_action_handle));
+			listener->set_missing_file_actions_handler(callable_mp(this, &EditorFileSystem::_missing_actions_handle));
+
+			watcher->add_watch("res://", listener);
+			watcher->watch();
+		}
 	}
+
+	// if (watcher.is_valid()) {
+	// 	return;
+	// }
 
 	sources_changed.clear();
 	scanning_done.clear();
@@ -2079,6 +2095,95 @@ int EditorFileSystem::_dir_info_remove(EditorFileSystemDirectory *p_dir, const S
 	}
 
 	return count;
+}
+
+bool EditorFileSystem::_file_event_filter(WatchID p_id, const String &p_dir_path, const String &p_filename, int p_type) {
+	const String &project_path = ProjectSettings::get_singleton()->get_resource_path().path_join("");
+	if (!p_dir_path.begins_with(project_path)) {
+		return true; // Out of scope.
+	}
+
+	const String &dir_path = p_dir_path.right(project_path.length() - 1);
+
+	if (dir_path.find("/.") != -1) {
+		return true; // Event in hidden directory.
+	}
+
+	const bool is_file = (p_type & FileListener::IS_DIR) == 0;
+	if (is_file && p_filename == ".gdignore") {
+		return false; // The file used to indicate whether Godot should ignore the parent directory.
+	}
+
+	if (p_filename.begins_with(".")) {
+		return true; // Event of hidden file or directory.
+	}
+
+	for (const String &ignored_dir : ignored_dirs) {
+		if (p_dir_path.begins_with(ignored_dir)) {
+			return true; // Event in Godot's ignore directories.
+		}
+	}
+
+	return is_file && !p_filename.validate_extension(valid_extensions);
+}
+
+bool EditorFileSystem::_file_action_handle(WatchID p_id, const String &p_dir_path, const String &p_filename, int p_type, FileListener::FileAction p_action, const String &p_old_path) {
+	const bool is_dir = (p_type & FileListener::IS_DIR) != 0;
+
+	print_line(vformat("Watch id: %d, dir path: %s, filename: %s, type: %d, action: %d, old path: %s. ++++++++++", p_id, p_dir_path, p_filename, p_type, p_action, p_old_path));
+	switch (p_action) {
+		case FileListener::ACTION_ADD: {
+			if (is_dir) {
+				const String &path = p_dir_path.path_join(p_filename + "/");
+				if (_should_skip_directory(path)) {
+					ignored_dirs.insert(path);
+					return false;
+				}
+			} else {
+				if (p_filename == ".gdignore") {
+					ignored_dirs.insert(p_dir_path);
+					return false;
+				}
+			}
+
+		} break;
+		case FileListener::ACTION_DELETE: {
+			if (is_dir) {
+				const String &path = p_dir_path.path_join(p_filename + "/");
+				ignored_dirs.erase(path);
+			} else {
+				if (p_filename == ".gdignore") {
+					ignored_dirs.erase(p_dir_path);
+					return true;
+				}
+			}
+		} break;
+		case FileListener::ACTION_MODIFIED: {
+		} break;
+		case FileListener::ACTION_MOVED: {
+			if (is_dir) {
+				ignored_dirs.erase(p_old_path);
+				const String &path = p_dir_path.path_join(p_filename + "/");
+				if (_should_skip_directory(path)) {
+					ignored_dirs.insert(path);
+					return false;
+				}
+			} else {
+				ignored_dirs.erase(p_old_path.get_base_dir() + "/");
+				if (p_filename == ".gdignore") {
+					ignored_dirs.insert(p_dir_path);
+					return true;
+				}
+			}
+		} break;
+	}
+
+	print_line(vformat("Watch id: %d, dir path: %s, filename: %s, type: %d, action: %d, old path: %s. ----------", p_id, p_dir_path, p_filename, p_type, p_action, p_old_path));
+
+	return false;
+}
+
+void EditorFileSystem::_missing_actions_handle(WatchID p_id, const String &p_path) {
 }
 
 void EditorFileSystem::_process_file_system(const ScannedDirectory *p_scan_dir, EditorFileSystemDirectory *p_dir, ScanProgress &p_progress, HashSet<String> *r_processed_files) {
@@ -4327,4 +4432,6 @@ EditorFileSystem::~EditorFileSystem() {
 	}
 	filesystem = nullptr;
 	ResourceSaver::set_get_resource_id_for_path(nullptr);
+
+	watcher = nullptr;
 }
