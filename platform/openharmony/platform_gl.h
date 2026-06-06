@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  wrapper_openharmony.h                                                 */
+/*  platform_gl.h                                                         */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,20 +30,16 @@
 
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
+#ifndef GL_API_ENABLED
+#define GL_API_ENABLED // Allow using desktop GL.
+#endif
 
-enum WrapperScreenOrientation {
-	WRAPPER_SCREEN_LANDSCAPE,
-	WRAPPER_SCREEN_PORTRAIT,
-	WRAPPER_SCREEN_REVERSE_LANDSCAPE,
-	WRAPPER_SCREEN_REVERSE_PORTRAIT,
-};
+#ifndef GLES_API_ENABLED
+#define GLES_API_ENABLED // Allow using GLES.
+#endif
 
-int ohos_wrapper_get_display_dpi();
-float ohos_wrapper_get_display_scaled_density();
-float ohos_wrapper_get_display_refresh_rate();
-WrapperScreenOrientation ohos_wrapper_get_display_orientation();
-void ohos_wrapper_screen_set_keep_on(int32_t window_id, bool p_enable);
-bool ohos_wrapper_screen_is_kept_on(int32_t window_id);
-int ohos_wrapper_get_keyboard_avoid_area(int32_t window_id);
+#ifndef GLAD_GLES2
+#define GLAD_GLES2
+#endif
+
+#include <thirdparty/glad/glad/gl.h> // IWYU pragma: export.

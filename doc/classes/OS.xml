@@ -273,6 +273,7 @@
 			<return type="String" />
 			<description>
 				Returns the name of the distribution for Linux and BSD platforms (e.g. "Ubuntu", "Manjaro", "OpenBSD", etc.).
+				Returns the name of the distribution for OpenHarmony platforms (e.g. "HarmonyOS", etc.).
 				Returns the same value as [method get_name] for stock Android ROMs, but attempts to return the custom ROM name for popular Android derivatives such as "LineageOS".
 				Returns the same value as [method get_name] for other platforms.
 				[b]Note:[/b] This method is not supported on the Web platform. It returns an empty string.
@@ -371,7 +372,7 @@
 			<return type="String" />
 			<description>
 				Returns the model name of the current device.
-				[b]Note:[/b] This method is implemented on Android, iOS, macOS, and Windows. Returns [code]"GenericDevice"[/code] on unsupported platforms.
+				[b]Note:[/b] This method is implemented on Android, iOS, macOS, OpenHarmony, and Windows. Returns [code]"GenericDevice"[/code] on unsupported platforms.
 			</description>
 		</method>
 		<method name="get_name" qualifiers="const">
@@ -382,6 +383,7 @@
 				- On macOS, this is [code]"macOS"[/code].
 				- On Linux-based operating systems, this is [code]"Linux"[/code].
 				- On BSD-based operating systems, this is [code]"FreeBSD"[/code], [code]"NetBSD"[/code], [code]"OpenBSD"[/code], or [code]"BSD"[/code] as a fallback.
+				- On OpenHarmony-based operating systems, this is [code]"OpenHarmony"[/code].
 				- On Android, this is [code]"Android"[/code].
 				- On iOS, this is [code]"iOS"[/code].
 				- On Web, this is [code]"Web"[/code].

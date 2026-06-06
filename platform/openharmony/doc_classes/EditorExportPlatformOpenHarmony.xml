@@ -1,78 +1,496 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <class name="EditorExportPlatformOpenHarmony" inherits="EditorExportPlatform" api_type="editor" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
 	<brief_description>
-		Export platform for OpenHarmony applications.
+		Exporter for Harmony/OpenHarmony.
 	</brief_description>
 	<description>
-		The OpenHarmony export platform allows you to build and deploy Godot projects as OpenHarmony applications ([code].hap[/code] files). OpenHarmony is an open-source operating system for various smart devices including smartphones, tablets, and IoT devices.
-		This platform handles the complete export process including:
-		- Template extraction and project configuration
-		- Asset packaging and resource management
-		- Native library integration
-		- Application signing and certification
-		- Device deployment and debugging
-		[b]Requirements:[/b]
-		- OpenHarmony SDK properly installed and configured
-		- Vulkan renderer (Forward+ or Mobile rendering method with the Vulkan driver)
-		- Valid export templates (debug/release)
-		- For device deployment: HDC (HarmonyOS Device Connector) tool
-		- For signing: Valid certificate files and signing profiles
-		[b]Supported Architectures:[/b]
-		- ARM64 (arm64-v8a) - Primary architecture for most OpenHarmony devices
-		- x86_64 - For emulator and development purposes
-		[b]Export Process:[/b]
-		1. Template preparation and extraction
-		2. Project configuration and manifest generation
-		3. Asset copying and resource processing
-		4. Native library integration
-		5. Application building using Hvigor build system
-		6. Optional code signing
-		7. Package generation ([code].hap[/code] or [code].app[/code] files)
 	</description>
 	<tutorials>
 	</tutorials>
 	<members>
-		<member name="architectures/arm64" type="bool" setter="" getter="">
-			Enable ARM64 architecture support. This is the primary architecture for most OpenHarmony devices including smartphones and tablets. Only one architecture can be selected at a time. This option is only visible when advanced options are enabled in the export preset.
+		<member name="architectures/arm64-v8a" type="bool" setter="" getter="">
+			If [code]true[/code], [code]arm64[/code] binaries are included into exported project.
+			[b]Note:[/b] Only one architecture can be selected at a time.
+			[b]Note:[/b] This option is only visible when advanced options are enabled in the export preset.
 		</member>
 		<member name="architectures/x86_64" type="bool" setter="" getter="">
-			Enable x86_64 architecture support. This is primarily used for emulator testing and development purposes. Only one architecture can be selected at a time. This option is only visible when advanced options are enabled in the export preset.
+			If [code]true[/code], [code]x86_64[/code] binaries are included into exported project. This is primarily used for emulator testing and development purposes.
+			[b]Note:[/b] Only one architecture can be selected at a time.
+			[b]Note:[/b] This option is only visible when advanced options are enabled in the export preset.
 		</member>
-		<member name="build/background_image" type="String" setter="" getter="">
-			Path to the background image file (PNG format, 1024x1024 pixels) used for the application icon. This image will be copied to the media folder during export and referenced in the application manifest.
-		</member>
-		<member name="build/bundle_id" type="String" setter="" getter="">
-			The unique bundle identifier for the OpenHarmony application. This should follow reverse domain notation (e.g., "com.example.myapp"). This identifier is used in the application manifest and must be unique across the OpenHarmony ecosystem.
-		</member>
-		<member name="build/default_orientation" type="int" setter="" getter="">
-			The default screen orientation for the application. Determines how the application will be displayed when launched on OpenHarmony devices.
+		<member name="build/compress_native_libraries" type="bool" setter="" getter="">
+			If [code]true[/code], native libraries are stored in the package file after being compressed. See [code]compressNativeLibs[/code] tag in [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/module-configuration-file#tags-in-the-configuration-file]Tags in the Configuration File[/url].
+			[b]Note:[/b] While enabling compression can reduce the size of the binary, it may result in slower application startup because the native libraries must be extracted before use, rather than being loaded directly.
 		</member>
 		<member name="build/export_project_only" type="bool" setter="" getter="">
-			When enabled, only exports the project files without building the final application package. This is useful for manual building or integration with external build systems. When disabled, the complete build process including Hvigor compilation will be executed.
+			If [code]true[/code], no build will be performed; the project will only be exported as a project converted to arkts.
 		</member>
-		<member name="build/foreground_image" type="String" setter="" getter="">
-			Path to the foreground image file (PNG format, 1024x1024 pixels) used for the application icon. This image will be copied to the media folder during export and referenced in the application manifest.
+		<member name="build/min_sdk" type="String" setter="" getter="">
+			Minimum OpenHarmony API level required for the application to run. See [code]compatibleSdkVersion[/code] tag in [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/ide-hvigor-build-profile-app#section45865492619]products[/url].
 		</member>
-		<member name="build/override_project_dir" type="bool" setter="" getter="">
-			When enabled, allows overriding the default project directory structure during export. This can be useful for custom build configurations or when integrating with existing OpenHarmony projects.
+		<member name="build/override_export_project" type="bool" setter="" getter="">
+			If [code]true[/code], allows clearing existing project and re-exporting.
 		</member>
-		<member name="build/sdk_version" type="String" setter="" getter="">
-			The target OpenHarmony SDK version for the application. This version will be used in the build configuration and determines the available APIs and features. The version should match an installed SDK version.
+		<member name="build/runtime_os" type="String" setter="" getter="">
+			The target runtime os. Available options are as follows:
+			- [code]HarmonyOS[/code]
+			- [code]OpenHarmony[/code]
 		</member>
-		<member name="build/sign" type="bool" setter="" getter="">
-			Enable application signing during the export process. When enabled, the application will be signed using the provided certificate and profile files. This is required for distribution and installation on real devices. When enabled, all signing options become visible and required.
+		<member name="build/target_sdk" type="String" setter="" getter="">
+			The OpenHarmony API level on which the application is designed to run. See [code]targetSdkVersion[/code] tag in [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/ide-hvigor-build-profile-app#section45865492619]products[/url].
 		</member>
 		<member name="custom_template/debug" type="String" setter="" getter="">
-			Path to a custom debug template ZIP file. When specified, this template will be used instead of the default "openharmony_debug_arm64-v8a.zip" template. The template should contain the complete OpenHarmony project structure. This option is only visible when advanced options are enabled in the export preset.
+			Path to a ZIP file to use as a custom export template for debug exports. If left empty, default template is used.
 		</member>
 		<member name="custom_template/release" type="String" setter="" getter="">
-			Path to a custom release template ZIP file. When specified, this template will be used instead of the default "openharmony_release_arm64-v8a.zip" template. The template should contain the complete OpenHarmony project structure. This option is only visible when advanced options are enabled in the export preset.
+			Path to a ZIP file to use as a custom export template for release exports. If left empty, default template is used.
 		</member>
-		<member name="permissions/ohos.permission.INTERNET" type="bool" setter="" getter="">
-			Request INTERNET permission for the application. This permission allows the application to access network resources and make internet connections. When enabled, this permission will be added to the application manifest.
+		<member name="package/default_orientation" type="String" setter="" getter="">
+			Startup direction of the application. Available options are as follows:
+			- [code]unspecified[/code]: automatically determined by the system.
+			- [code]landscape[/code]: landscape mode.
+			- [code]portrait[/code]: portrait mode.
+			- [code]follow_recent[/code]: rotation mode following the background window.
+			- [code]landscape_inverted[/code]: inverted landscape mode.
+			- [code]portrait_inverted[/code]: inverted portrait mode.
+			- [code]auto_rotation[/code]: determined by the sensor.
+			- [code]auto_rotation_landscape[/code]: determined by the sensor in the horizontal direction, including landscape and inverted landscape modes.
+			- [code]auto_rotation_portrait[/code]: determined by the sensor in the vertical direction, including portrait and inverted portrait modes.
+			- [code]auto_rotation_restricted[/code]: determined by the sensor when the sensor switch is enabled.
+			- [code]auto_rotation_landscape_restricted[/code]: determined by the sensor in the horizontal direction, including landscape and inverted landscape modes, when the sensor switch is enabled.
+			- [code]auto_rotation_portrait_restricted[/code]: determined by the sensor in the vertical direction, including portrait and inverted portrait modes, when the sensor switch is enabled.
+			- [code]locked[/code]: auto-rotation disabled.
+			- [code]auto_rotation_unspecified[/code]: auto-rotation controlled by the switch and determined by the system.
+			- [code]follow_desktop[/code]: following the orientation of the home screen.
+			[b]Note:[/b] For more information, see [code]orientation[/code] tag in [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/module-configuration-file#abilities]abilities[/url].
 		</member>
-		<member name="permissions/ohos.permission.MICROPHONE" type="bool" setter="" getter="">
-			Request MICROPHONE permission for the application. This permission allows the application to access the device's microphone for audio recording. When enabled, this permission will be added to the application manifest and requires user consent at runtime.
+		<member name="package/image/background" type="String" setter="" getter="">
+			Path to the image used as the background layer of the application icon.
+			- The image size must be 1024x1024 in pixels.
+			- The image must be square images. No rounded corners are required.
+			- The image must be in PNG format.
+			[b]Note:[/b] For more information, see [url=https://developer.huawei.com/consumer/en/doc/design-guides/application-icon-0000001953444009#section634668113212]Icon Resource Specifications[/url].
+		</member>
+		<member name="package/image/foreground" type="String" setter="" getter="">
+			Path to the image used as the foreground layer of the application icon.
+			- The image size must be 1024x1024 in pixels.
+			- The image must be square images. No rounded corners are required.
+			- The image must be in PNG format.
+			[b]Note:[/b] For more information, see [url=https://developer.huawei.com/consumer/en/doc/design-guides/application-icon-0000001953444009#section634668113212]Icon Resource Specifications[/url].
+		</member>
+		<member name="package/signed" type="bool" setter="" getter="">
+			If [code]true[/code], package signing is enabled.
+		</member>
+		<member name="package/unique_name" type="String" setter="" getter="">
+			Bundle name, which uniquely identifies an application. The value must comply with the following rules:
+			- The bundle name contains at least three segments, separated by periods ([code].[/code]). Each segment can contain only letters ([code]a-z[/code]), digits ([code]0-9[/code]), and underscores ([code]_[/code]).
+			- The first segment starts with a letter, and other segments start with a digit or letter. Each segment ends with a digit or letter.
+			- Consecutive periods ([code]..[/code]) are not allowed.
+			- Contains 7 to 128 bytes.
+			[b]Note:[/b] It is recommended to use reverse domain name notation, for example, [code]com.example.demo[/code]. For more information, see [code]bundleName[/code] tag in [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/app-configuration-file#tags-in-the-configuration-file]Tags in the Configuration File[/url].
+		</member>
+		<member name="permissions/accelerometer" type="bool" setter="" getter="">
+			Allows an application to read data from an acceleration sensor, uncalibrated acceleration sensor, or linear acceleration sensor. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionaccelerometer]ohos.permission.ACCELEROMETER[/url].
+		</member>
+		<member name="permissions/access_biometric" type="bool" setter="" getter="">
+			Allows an application to use biometric recognition for identity authentication. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionaccess_biometric]ohos.permission.ACCESS_BIOMETRIC[/url].
+			This permission allows the following operations: check the biometric recognition capability of the device, customize the authentication dialog box, start biometric recognition, and obtain biometric recognition prompts.
+		</member>
+		<member name="permissions/access_bluetooth/enabled" type="bool" setter="" getter="">
+			Allows an application to access Bluetooth. This permission enables features such as scanning, discovering, pairing with, and connecting to nearby Bluetooth devices, as well as advertising and scanning for Bluetooth Low Energy devices. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all-user#ohospermissionaccess_bluetooth]ohos.permission.ACCESS_BLUETOOTH[/url].
+		</member>
+		<member name="permissions/access_bluetooth/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/access_bluetooth/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/access_car_distributed_engine" type="bool" setter="" getter="">
+			Allows an application to access the distributed travel service engine. With this permission, the application can obtain the connection information between a phone and a head unit, such as the connection status and display ID. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionaccess_car_distributed_engine]ohos.permission.ACCESS_CAR_DISTRIBUTED_ENGINE[/url].
+		</member>
+		<member name="permissions/access_cert_manager" type="bool" setter="" getter="">
+			Allows an application to query certificates and private credentials. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionaccess_cert_manager]ohos.permission.ACCESS_CERT_MANAGER[/url].
+		</member>
+		<member name="permissions/access_extensional_device_driver" type="bool" setter="" getter="">
+			Allows an application to use enhanced functions of the devices connected to this device. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionaccess_extensional_device_driver]ohos.permission.ACCESS_EXTENSIONAL_DEVICE_DRIVER[/url].
+		</member>
+		<member name="permissions/access_nearlink/enabled" type="bool" setter="" getter="">
+			Allows an application to access and use NearLink, such as device pairing and connecting to nearby devices. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all-user#ohospermissionaccess_nearlink]ohos.permission.ACCESS_NEARLINK[/url].
+		</member>
+		<member name="permissions/access_nearlink/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/access_nearlink/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/access_notification_policy" type="bool" setter="" getter="">
+			Allows an application to access the notification policy on the device. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionaccess_notification_policy]ohos.permission.ACCESS_NOTIFICATION_POLICY[/url].
+			This permission is required only when the ringtone needs to be changed from mute to unmute.
+		</member>
+		<member name="permissions/access_service_navigation_info" type="bool" setter="" getter="">
+			Allows an application to access the navigation service. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionaccess_service_navigation_info]ohos.permission.ACCESS_SERVICE_NAVIGATION_INFO[/url].
+		</member>
+		<member name="permissions/activity_motion/enabled" type="bool" setter="" getter="">
+			Allows an application to read the current workout status of the user, such as detecting whether the user is working out and recording the number of steps the user has taken. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all-user#ohospermissionactivity_motion]ohos.permission.ACTIVITY_MOTION[/url].
+		</member>
+		<member name="permissions/activity_motion/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/activity_motion/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/allow_coredump" type="bool" setter="" getter="">
+			Allows the system to dump the memory of an application process to the application sandbox. With this permission, the application allows the system to dump application memory to the sandbox. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionallow_coredump]ohos.permission.ALLOW_COREDUMP[/url].
+		</member>
+		<member name="permissions/app_tracking_consent/enabled" type="bool" setter="" getter="">
+			Allows an application to read the open anonymous device identifier (OAID). See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all-user#ohospermissionapp_tracking_consent]ohos.permission.APP_TRACKING_CONSENT[/url].
+		</member>
+		<member name="permissions/app_tracking_consent/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/app_tracking_consent/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/approximately_location/enabled" type="bool" setter="" getter="">
+			Allows an application to obtain the approximate location information of a device. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all-user#ohospermissionapproximately_location]ohos.permission.APPROXIMATELY_LOCATION[/url].
+		</member>
+		<member name="permissions/approximately_location/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/approximately_location/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/background_manager_power_save_mode" type="bool" setter="" getter="">
+			Allows an application to set the power saving mode for its own processes. This permission can be requested when the application meets the following conditions:
+			- The application is not focused, and there are no audio operations or UI updates.
+			- The application cannot obtain the power lock through the system framework.
+			- The application needs to perform time-consuming computing tasks, such as compression, decompression, and compilation, which are significantly restricted by CPU resources. (In this case, the power saving mode will be enabled forcibly.)
+			See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionbackground_manager_power_save_mode]ohos.permission.BACKGROUND_MANAGER_POWER_SAVE_MODE[/url].
+		</member>
+		<member name="permissions/camera/enabled" type="bool" setter="" getter="">
+			Allows an application to use the camera. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all-user#ohospermissioncamera]ohos.permission.CAMERA[/url].
+		</member>
+		<member name="permissions/camera/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/camera/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/clean_background_processes" type="bool" setter="" getter="">
+			Allows an application to clear background processes based on their bundle names. With this permission, the application can detect associated background tasks based on the bundle names and selectively terminate these tasks to release system resources or optimize performance. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionclean_background_processes]ohos.permission.CLEAN_BACKGROUND_PROCESSES[/url].
+		</member>
+		<member name="permissions/commonevent_sticky" type="bool" setter="" getter="">
+			Allows an application to publish sticky common events. With this permission, the application can publish sticky common events, so that subscribers can receive common events that have been sent before subscription. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissioncommonevent_sticky]ohos.permission.COMMONEVENT_STICKY[/url].
+		</member>
+		<member name="permissions/connect_objecteditor_extension" type="bool" setter="" getter="">
+			Allows an application to query information about and launch ObjectEditorExtensionAbility components. With this permission, the application can query available types of pluggable embedded content and edit the corresponding content. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionconnect_objecteditor_extension]ohos.permission.CONNECT_OBJECTEDITOR_EXTENSION[/url].
+		</member>
+		<member name="permissions/custom_screen_capture/enabled" type="bool" setter="" getter="">
+			Allows an application to capture screen information. With this permission, the application can perform operations such as taking screenshots. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all-user#ohospermissioncustom_screen_capture]ohos.permission.CUSTOM_SCREEN_CAPTURE[/url].
+		</member>
+		<member name="permissions/custom_screen_capture/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/custom_screen_capture/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/customize_menu_icon" type="bool" setter="" getter="">
+			Allows an application to customize icons in the shortcut menu of Files. With this permission, the application can customize its icon in the shortcut menu of Files, helping users recognize and start it easily. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissioncustomize_menu_icon]ohos.permission.CUSTOMIZE_MENU_ICON[/url].
+		</member>
+		<member name="permissions/detect_gesture" type="bool" setter="" getter="">
+			Allows an application to detect gestures. With this permission, the application can detect information such as the user's holding posture and operating hand. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissiondetect_gesture]ohos.permission.DETECT_GESTURE[/url].
+		</member>
+		<member name="permissions/discover_bluetooth" type="bool" setter="" getter="">
+			Allows an application to configure Bluetooth on a device, initiate or cancel a scan for Bluetooth devices, and pair with Bluetooth devices. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissiondiscover_bluetooth]ohos.permission.DISCOVER_BLUETOOTH[/url].
+		</member>
+		<member name="permissions/distributed_datasync/enabled" type="bool" setter="" getter="">
+			Allows the application data to be exchanged between devices. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all-user#ohospermissiondistributed_datasync]ohos.permission.DISTRIBUTED_DATASYNC[/url].
+		</member>
+		<member name="permissions/distributed_datasync/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/distributed_datasync/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/extra_system_grant_permissions" type="PackedStringArray" setter="" getter="">
+			Add other permissions that use the [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/app-permission-mgmt-overview#system_grant-system-authorization]system_grant (System Authorization)[/url] authorization mode.
+			[b]Note:[/b] Only receive permission names as is.
+		</member>
+		<member name="permissions/file_access_persist" type="bool" setter="" getter="">
+			Allows an application to support persistent access to file URIs. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/restricted-permissions#ohospermissionfile_access_persist]ohos.permission.FILE_ACCESS_PERSIST[/url].
+		</member>
+		<member name="permissions/get_bundle_info" type="bool" setter="" getter="">
+			Allows an application to obtain basic information about another application. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionget_bundle_info]ohos.permission.GET_BUNDLE_INFO[/url].
+		</member>
+		<member name="permissions/get_donotdisturb_state" type="bool" setter="" getter="">
+			Allows an application to obtain the Do Not Disturb state of the system. With this permission, the application can query whether the system is in the Do Not Disturb state via an API call. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionget_donotdisturb_state]ohos.permission.GET_DONOTDISTURB_STATE[/url].
+		</member>
+		<member name="permissions/get_file_icon" type="bool" setter="" getter="">
+			Allows an application to obtain the icon of the specified file type. With this permission, the application can obtain the icon of the specified file type. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionget_file_icon]ohos.permission.GET_FILE_ICON[/url].
+		</member>
+		<member name="permissions/get_network_info" type="bool" setter="" getter="">
+			Allows an application to obtain network information. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionget_network_info]ohos.permission.GET_NETWORK_INFO[/url].
+		</member>
+		<member name="permissions/get_wifi_info" type="bool" setter="" getter="">
+			Allows an application to obtain Wi-Fi information and use the Wi-Fi P2P capability. With this permission, the application can obtain Wi-Fi information, including the Wi-Fi on/off state, scan results, connection information, connection state, device capability, and P2P state. In addition, the application can use the P2P capability. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionget_wifi_info]ohos.permission.GET_WIFI_INFO[/url].
+		</member>
+		<member name="permissions/gyroscope" type="bool" setter="" getter="">
+			Allows an application to read data from a gyroscope sensor or uncalibrated gyroscope sensor. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissiongyroscope]ohos.permission.GYROSCOPE[/url].
+		</member>
+		<member name="permissions/hdr_brightness" type="bool" setter="" getter="">
+			Allows an application to use the HDR brightening capability. With this permission, the application can apply HDR brightening effects to component content. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionhdr_brightness]ohos.permission.HDR_BRIGHTNESS[/url].
+		</member>
+		<member name="permissions/inherit_parent_permission" type="bool" setter="" getter="">
+			Allows a child process to inherit the permissions of its parent process. This permission applies only to binary programs. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissioninherit_parent_permission]ohos.permission.INHERIT_PARENT_PERMISSION[/url].
+		</member>
+		<member name="permissions/input_keyboard_controller" type="bool" setter="" getter="">
+			Allows an application to set the status of keyboard function keys. With this permission, the application can turn on or off the function keys, such as CapsLock. This permission is available only to input method applications. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissioninput_keyboard_controller]ohos.permission.INPUT_KEYBOARD_CONTROLLER[/url].
+		</member>
+		<member name="permissions/internet" type="bool" setter="" getter="">
+			Allows an application to access the Internet. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissioninternet]ohos.permission.INTERNET[/url].
+		</member>
+		<member name="permissions/keep_background_running" type="bool" setter="" getter="">
+			Allows a Service ability to keep running in the background. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionkeep_background_running]ohos.permission.KEEP_BACKGROUND_RUNNING[/url].
+		</member>
+		<member name="permissions/kernel.allow_debug" type="bool" setter="" getter="">
+			Allows a C/C++ program to be debugged. With this permission, the C/C++ program in the application can be debugged. However, the runtime memory may be dumped. Exercise caution when using this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionkernelallow_debug]ohos.permission.kernel.ALLOW_DEBUG[/url].
+		</member>
+		<member name="permissions/kernel.debugger" type="bool" setter="" getter="">
+			Allows an application to obtain the debugging capability. With this permission, the application can have the ptrace debugging capability as the main process. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionkerneldebugger]ohos.permission.kernel.DEBUGGER[/url].
+		</member>
+		<member name="permissions/kernel.exempt_anonymous_executable_memory" type="bool" setter="" getter="">
+			Allows a program to declare anonymous executable memory. This permission applies only to binary programs. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionkernelexempt_anonymous_executable_memory]ohos.permission.kernel.EXEMPT_ANONYMOUS_EXECUTABLE_MEMORY[/url].
+		</member>
+		<member name="permissions/kernel.ignore_library_validation" type="bool" setter="" getter="">
+			Allows an independent binary program to load independent binary .so files with different owner IDs. This permission applies only to independent binary programs, not to HAPs. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionkernelignore_library_validation]ohos.permission.kernel.IGNORE_LIBRARY_VALIDATION[/url].
+		</member>
+		<member name="permissions/kernel.net_raw" type="bool" setter="" getter="">
+			Allows an application to capture network data packets. With this permission, the application can capture network data packets only after being authenticated by the user. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionkernelnet_raw]ohos.permission.kernel.NET_RAW[/url].
+		</member>
+		<member name="permissions/location/enabled" type="bool" setter="" getter="">
+			Allows an application to obtain the device location. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all-user#ohospermissionlocation]ohos.permission.LOCATION[/url].
+			[b]Note:[/b] This permission must be requested with [member permissions/approximately_location/enabled].
+		</member>
+		<member name="permissions/location/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/location/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/location_in_background/enabled" type="bool" setter="" getter="">
+			Allows an application running in the background to obtain the device location. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all-user#ohospermissionlocation_in_background]ohos.permission.LOCATION_IN_BACKGROUND[/url].
+		</member>
+		<member name="permissions/location_in_background/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/location_in_background/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/lock_window_cursor" type="bool" setter="" getter="">
+			Allows an application to lock the mouse cursor when the window gains focus. With this permission, the application can lock the mouse cursor within the window when focused, preventing it from moving outside. It also controls if the cursor moves with the window and releases the cursor when the window loses focus. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionlock_window_cursor]ohos.permission.LOCK_WINDOW_CURSOR[/url].
+		</member>
+		<member name="permissions/manage_input_infrared_emitter" type="bool" setter="" getter="">
+			Allows an application to use infrared interfaces. With this permission, the application can obtain the maximum frequency supported by the infrared module and send infrared signals at a specific frequency. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionmanage_input_infrared_emitter]ohos.permission.MANAGE_INPUT_INFRARED_EMITTER[/url].
+		</member>
+		<member name="permissions/media_location/enabled" type="bool" setter="" getter="">
+			Allows an application to access geographical locations in the user's media file. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all-user#ohospermissionmedia_location]ohos.permission.MEDIA_LOCATION[/url].
+		</member>
+		<member name="permissions/media_location/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/media_location/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/microphone/enabled" type="bool" setter="" getter="">
+			Allows an application to access the microphone. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all-user#ohospermissionmicrophone]ohos.permission.MICROPHONE[/url].
+		</member>
+		<member name="permissions/microphone/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/microphone/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/ndk_start_self_ui_ability" type="bool" setter="" getter="">
+			Allows an application to start its UIAbility by using C APIs. Currently, this permission is available only to 2-in-1 device applications. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionndk_start_self_ui_ability]ohos.permission.NDK_START_SELF_UI_ABILITY[/url].
+		</member>
+		<member name="permissions/nfc_card_emulation" type="bool" setter="" getter="">
+			Allows an application to implement card emulation. With this permission, the application can register the card emulation service and perform card emulation transactions. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionnfc_card_emulation]ohos.permission.NFC_CARD_EMULATION[/url].
+		</member>
+		<member name="permissions/nfc_tag" type="bool" setter="" getter="">
+			Allows an application to read and write NFC tags. With this permission, the application can receive a tag, and read data from and write data to a tag. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionnfc_tag]ohos.permission.NFC_TAG[/url].
+		</member>
+		<member name="permissions/prepare_app_terminate" type="bool" setter="" getter="">
+			Allows an application to perform customized actions before being terminated. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionprepare_app_terminate]ohos.permission.PREPARE_APP_TERMINATE[/url].
+		</member>
+		<member name="permissions/print" type="bool" setter="" getter="">
+			Allows an application to obtain the print framework capability. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionprint]ohos.permission.PRINT[/url].
+		</member>
+		<member name="permissions/privacy_window" type="bool" setter="" getter="">
+			Allows an application to set screens that cannot be captured or recorded. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionprivacy_window]ohos.permission.PRIVACY_WINDOW[/url].
+		</member>
+		<member name="permissions/protect_screen_lock_data" type="bool" setter="" getter="">
+			Allows an application to protect its sensitive data from being accessed after the screen is locked. After the application obtains this permission, a directory in /el5 will be automatically created. Access to the data in this directory is denied after the screen is locked. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionprotect_screen_lock_data]ohos.permission.PROTECT_SCREEN_LOCK_DATA[/url].
+		</member>
+		<member name="permissions/publish_agent_reminder" type="bool" setter="" getter="">
+			Allows an application to use agent-powered reminders. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionpublish_agent_reminder]ohos.permission.PUBLISH_AGENT_REMINDER[/url].
+		</member>
+		<member name="permissions/read_account_login_state" type="bool" setter="" getter="">
+			Allows an application to read the login status of user accounts. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionread_account_login_state]ohos.permission.READ_ACCOUNT_LOGIN_STATE[/url].
+		</member>
+		<member name="permissions/read_audio/enabled" type="bool" setter="" getter="">
+			Allows an application to access the audio files in a user public directory. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/restricted-permissions#ohospermissionread_audio]ohos.permission.READ_AUDIO[/url].
+			[b]Note:[/b] This is a restricted permission, available only after being approved. For details about how to request restricted permissions, see [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions-in-acl]Requesting Restricted Permissions[/url].
+		</member>
+		<member name="permissions/read_audio/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/read_audio/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/read_calendar/enabled" type="bool" setter="" getter="">
+			Allows an application to read Calendar data. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all-user#ohospermissionread_calendar]ohos.permission.READ_CALENDAR[/url].
+		</member>
+		<member name="permissions/read_calendar/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/read_calendar/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/read_cloud_sync_config" type="bool" setter="" getter="">
+			Allows an application that has accessed the cloud to obtain its device-cloud synchronization configuration. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionread_cloud_sync_config]ohos.permission.READ_CLOUD_SYNC_CONFIG[/url].
+		</member>
+		<member name="permissions/read_health_data/enabled" type="bool" setter="" getter="">
+			Allows an application to read the health data of the user. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all-user#ohospermissionread_health_data]ohos.permission.READ_HEALTH_DATA[/url].
+		</member>
+		<member name="permissions/read_health_data/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/read_health_data/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/read_imagevideo/enabled" type="bool" setter="" getter="">
+			Allows an application to access the images/videos in a user public directory. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/restricted-permissions#ohospermissionread_imagevideo]ohos.permission.READ_IMAGEVIDEO[/url].
+			[b]Note:[/b] This is a restricted permission, available only after being approved. For details about how to request restricted permissions, see [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions-in-acl]Requesting Restricted Permissions[/url].
+		</member>
+		<member name="permissions/read_imagevideo/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/read_imagevideo/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/read_pasteboard/enabled" type="bool" setter="" getter="">
+			Allows an application to read Pasteboard data. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/restricted-permissions#ohospermissionread_pasteboard]ohos.permission.READ_PASTEBOARD[/url].
+			[b]Note:[/b] By default, the system grants this permission for PC/2-in-1 device applications. However, users can change the permission settings.
+			[b]Note:[/b] This is a restricted permission, available only after being approved. For details about how to request restricted permissions, see [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions-in-acl]Requesting Restricted Permissions[/url].
+		</member>
+		<member name="permissions/read_pasteboard/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/read_pasteboard/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/read_write_desktop_directory/enabled" type="bool" setter="" getter="">
+			Allows an application to access the Desktop directory and its subdirectories in the user public directory. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/restricted-permissions#ohospermissionread_write_desktop_directory]ohos.permission.READ_WRITE_DESKTOP_DIRECTORY[/url].
+			[b]Note:[/b] Currently, only applications on 2-in-1 devices and tablets can request this permission.
+			[b]Note:[/b] This is a restricted permission, available only after being approved. For details about how to request restricted permissions, see [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions-in-acl]Requesting Restricted Permissions[/url].
+		</member>
+		<member name="permissions/read_write_desktop_directory/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/read_write_desktop_directory/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/read_write_documents_directory/enabled" type="bool" setter="" getter="">
+			Allows an application to access the Documents directory and its subdirectories in the public directory. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all-user#ohospermissionread_write_documents_directory]ohos.permission.READ_WRITE_DOCUMENTS_DIRECTORY[/url].
+			[b]Note:[/b] Although it is not a restricted permission, it is still only available after being approved. For details about how to request restricted permissions, see [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions-in-acl]Requesting Restricted Permissions[/url].
+		</member>
+		<member name="permissions/read_write_documents_directory/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/read_write_documents_directory/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/read_write_download_directory/enabled" type="bool" setter="" getter="">
+			Allows an application to access the Download directory and its subdirectories in the public directory. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all-user#ohospermissionread_write_download_directory]ohos.permission.READ_WRITE_DOWNLOAD_DIRECTORY[/url].
+			[b]Note:[/b] Although it is not a restricted permission, it is still only available after being approved. For details about how to request restricted permissions, see [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions-in-acl]Requesting Restricted Permissions[/url].
+		</member>
+		<member name="permissions/read_write_download_directory/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/read_write_download_directory/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/run_dyn_code" type="bool" setter="" getter="">
+			Allows an application to run dynamically delivered ArkCompiler bytecode when the ArkCompiler runtime engine is in restricted mode. The APIs related to this permission are system APIs, and this permission is available only to specific system applications. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionrun_dyn_code]ohos.permission.RUN_DYN_CODE[/url].
+		</member>
+		<member name="permissions/set_ability_instance_info" type="bool" setter="" getter="">
+			Allows an application to set the icon and label information for each ability. The configured icon and label information can be displayed in Task Center and the shortcut bar. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionset_ability_instance_info]ohos.permission.SET_ABILITY_INSTANCE_INFO[/url].
+		</member>
+		<member name="permissions/set_network_info" type="bool" setter="" getter="">
+			Allows an application to set data network information. With this permission, the application can activate or deactivate a network, and obtain and listen for network information. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionset_network_info]ohos.permission.SET_NETWORK_INFO[/url].
+		</member>
+		<member name="permissions/set_wifi_info" type="bool" setter="" getter="">
+			Allows an application to set a Wi-Fi device, including scanning, enabling/disabling, connecting, and disabling Wi-Fi, modifying Wi-Fi settings, and using Wi-Fi P2P capabilities. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionset_wifi_info]ohos.permission.SET_WIFI_INFO[/url].
+		</member>
+		<member name="permissions/set_window_transparent" type="bool" setter="" getter="">
+			Allows an application to set the main window container to be transparent and remove the shadow of the outer border of the main window. With this permission, the application can set the background color and the shadow visibility of the main window. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionset_window_transparent]ohos.permission.SET_WINDOW_TRANSPARENT[/url].
+		</member>
+		<member name="permissions/short_term_write_imagevideo/enabled" type="bool" setter="" getter="">
+			Allows an application to save images and videos to the user public directory within 30 minutes after obtaining the permission. If it exceeds 30 minutes, a dialog box will be displayed again to request user authorization. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/restricted-permissions#ohospermissionshort_term_write_imagevideo]ohos.permission.SHORT_TERM_WRITE_IMAGEVIDEO[/url].
+			[b]Note:[/b] This is a restricted permission, available only after being approved. For details about how to request restricted permissions, see [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions-in-acl]Requesting Restricted Permissions[/url].
+		</member>
+		<member name="permissions/short_term_write_imagevideo/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/short_term_write_imagevideo/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/start_window_below_lock_screen" type="bool" setter="" getter="">
+			Allows an application to start in the locked screen state. With this permission, the application can be started when the screen is locked. After the device is unlocked, the application launch screen is displayed. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionstart_window_below_lock_screen]ohos.permission.START_WINDOW_BELOW_LOCK_SCREEN[/url].
+		</member>
+		<member name="permissions/store_persistent_data" type="bool" setter="" getter="">
+			Allows an application to store persistent data. The persistent data will be cleared only when the device's factory settings are restored or the system is reinstalled. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionstore_persistent_data]ohos.permission.STORE_PERSISTENT_DATA[/url].
+		</member>
+		<member name="permissions/timeout_screenoff_disable_lock" type="bool" setter="" getter="">
+			Allows an application to turn off the screen but keep it unlocked after a timeout. The device locks by default when the screen turns off after a timeout. With this permission, the application does not enter the lock screen when the screen turns off after a timeout. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissiontimeout_screenoff_disable_lock]ohos.permission.TIMEOUT_SCREENOFF_DISABLE_LOCK[/url].
+		</member>
+		<member name="permissions/use_bluetooth" type="bool" setter="" getter="">
+			Allows an application to access Bluetooth configurations, including the Bluetooth name, Bluetooth device type, and switch status. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionuse_bluetooth]ohos.permission.USE_BLUETOOTH[/url].
+		</member>
+		<member name="permissions/vibrate" type="bool" setter="" getter="">
+			Allows an application to control vibration, including one-time vibration, preset vibration, or custom vibration. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionvibrate]ohos.permission.VIBRATE[/url].
+		</member>
+		<member name="permissions/window_topmost" type="bool" setter="" getter="">
+			Allows an application to set pinned windows. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all#ohospermissionwindow_topmost]ohos.permission.WINDOW_TOPMOST[/url].
+		</member>
+		<member name="permissions/write_audio/enabled" type="bool" setter="" getter="">
+			Allows an application to modify the audio files in a user public directory. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/restricted-permissions#ohospermissionwrite_audio]ohos.permission.WRITE_AUDIO[/url].
+			[b]Note:[/b] This is a restricted permission, available only after being approved. For details about how to request restricted permissions, see [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions-in-acl]Requesting Restricted Permissions[/url].
+		</member>
+		<member name="permissions/write_audio/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/write_audio/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/write_calendar/enabled" type="bool" setter="" getter="">
+			Allows an application to add, remove, and modify Calendar events. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/permissions-for-all-user#ohospermissionwrite_calendar]ohos.permission.WRITE_CALENDAR[/url].
+		</member>
+		<member name="permissions/write_calendar/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/write_calendar/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
+		</member>
+		<member name="permissions/write_imagevideo/enabled" type="bool" setter="" getter="">
+			Allows an application to modify the images/videos in a user public directory. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/restricted-permissions#ohospermissionwrite_imagevideo]ohos.permission.WRITE_IMAGEVIDEO[/url].
+			[b]Note:[/b] This is a restricted permission, available only after being approved. For details about how to request restricted permissions, see [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions-in-acl]Requesting Restricted Permissions[/url].
+		</member>
+		<member name="permissions/write_imagevideo/reason" type="String" setter="" getter="">
+			Reason for requesting this permission. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#specifications-for-reason]Specifications for reason[/url] for more.
+		</member>
+		<member name="permissions/write_imagevideo/when" type="String" setter="" getter="">
+			When the permission is used. It can only be set to a fixed value, either [code]inuse[/code] (when in use) or [code]always[/code]. It cannot be left empty. See [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/declare-permissions#declaring-permissions-in-the-configuration-file]Declaring Permissions in the Configuration File[/url] for more.
 		</member>
 		<member name="sign/certpath_file" type="String" setter="" getter="">
 			Path to the certificate file ([code].cer[/code]) used for application signing. This file contains the public key certificate that corresponds to the private key in the keystore. Required when signing is enabled. This option is only visible when build/sign is enabled.
@@ -94,6 +512,14 @@
 		</member>
 		<member name="sign/store_password" type="String" setter="" getter="">
 			The password for the keystore file. This password protects access to the keystore containing the signing keys. Required when signing is enabled. This field is marked as secret in the UI. This option is only visible when build/sign is enabled.
+		</member>
+		<member name="version/code" type="int" setter="" getter="">
+			Version number of the application. The value ranges from 0 to 2147483647. It is used only to determine whether a version is later than another version. A larger value indicates a later version. Ensure that a new version of the application uses a value greater than any of its predecessors.
+			[b]Note:[/b] For more information, see [code]versionCode[/code] tag in [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/app-configuration-file#tags-in-the-configuration-file]Tags in the Configuration File[/url].
+		</member>
+		<member name="version/name" type="String" setter="" getter="">
+			Application version visible to the user. Falls back to [member ProjectSettings.application/config/version] if left empty.
+			[b]Note:[/b] For more information, see [code]versionName[/code] tag in [url=https://developer.huawei.com/consumer/en/doc/harmonyos-guides/app-configuration-file#tags-in-the-configuration-file]Tags in the Configuration File[/url].
 		</member>
 	</members>
 </class>

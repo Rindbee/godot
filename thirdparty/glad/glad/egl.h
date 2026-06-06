@@ -271,6 +271,7 @@ typedef void (*GLADpostcallback)(void *ret, const char *name, GLADapiproc apipro
 #define EGL_PLATFORM_WAYLAND_KHR 0x31D8
 #define EGL_PLATFORM_X11_KHR 0x31D5
 #define EGL_PLATFORM_X11_SCREEN_KHR 0x31D6
+#define EGL_PLATFORM_OHOS_KHR 0x34E0
 #define EGL_READ 0x305A
 #define EGL_RED_SIZE 0x3024
 #define EGL_RENDERABLE_TYPE 0x3040

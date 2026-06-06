@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  bridge_openharmony.h                                                  */
+/*  egl_manager_openharmony.h                                             */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,40 +30,21 @@
 
 #pragma once
 
-#include <rawfile/raw_file_manager.h>
+#ifdef OPENHARMONY_ENABLED
+#ifdef EGL_ENABLED
+#ifdef GLES3_ENABLED
 
-#include <cstdint>
+#include "drivers/egl/egl_manager.h"
 
-extern "C" {
-typedef struct GodotTouchEvent {
-	uint32_t type;
-	uint32_t id;
-	float x;
-	float y;
-} GodotTouchEvent;
+class EGLManagerOpenHarmony : public EGLManager {
+public:
+	virtual const char *_get_platform_extension_name() const override;
+	virtual EGLenum _get_platform_extension_enum() const override;
+	virtual EGLenum _get_platform_api_enum() const override;
+	virtual Vector<EGLAttrib> _get_platform_display_attributes() const override;
+	virtual Vector<EGLint> _get_platform_context_attribs() const override;
+};
 
-typedef struct GodotKeyEvent {
-	uint32_t code;
-	char32_t unicode;
-	bool pressed;
-	bool alt;
-	bool ctrl;
-	bool shift;
-	bool meta;
-} GodotKeyEvent;
-
-typedef struct GodotMouseEvent {
-	uint32_t type;
-	uint32_t button;
-	uint32_t mask;
-	float x;
-	float y;
-} GodotMouseEvent;
-
-int64_t godot_init(NativeResourceManager *p_resource_manager, void *p_native_window, int32_t window_id, int64_t window_width, int64_t window_height, const char *p_allowed_permissions);
-void godot_touch(GodotTouchEvent *p_event, int count);
-void godot_mouse(GodotMouseEvent *p_event);
-void godot_key(GodotKeyEvent *p_event);
-void godot_resize(uint32_t width, uint32_t height);
-void godot_window_event(int32_t event);
-}
+#endif // GLES3_ENABLED
+#endif // EGL_ENABLED
+#endif // OPENHARMONY_ENABLED

@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  wrapper_openharmony.cpp                                               */
+/*  AbilityStage.ets                                                      */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,58 +28,45 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#include "wrapper_openharmony.h"
+import { AbilityStage, Want } from "@kit.AbilityKit";
+import { HashMap } from "@kit.ArkTS";
 
-#include <window_manager/oh_display_manager.h>
-#include <window_manager/oh_window.h>
+export default class GodotAbilityStage extends AbilityStage {
+  private project_ids: HashMap<string, number> = new HashMap();
+  private id_counter = 0;
 
-int ohos_wrapper_get_display_dpi() {
-	int32_t dpi = 0;
-	OH_NativeDisplayManager_GetDefaultDisplayDensityDpi(&dpi);
-	return dpi;
-}
+  private parse_id(want: Want): number {
+    let project_id = want.parameters?.godot_project_id as string;
+    if (!project_id) {
+      project_id = "ProjectManager";
+    }
+    let id = 0;
+    try {
+      if (this.project_ids.hasKey(project_id)) {
+        id = this.project_ids.get(project_id);
+      } else {
+        id = this.id_counter++;
+        this.project_ids.set(project_id, id);
+      }
+    } catch (error) {}
+    return id;
+  }
 
-float ohos_wrapper_get_display_scaled_density() {
-	float scaled_density = 0;
-	OH_NativeDisplayManager_GetDefaultDisplayScaledDensity(&scaled_density);
-	return scaled_density;
-}
+  onAcceptWant(want: Want): string {
+    let id = this.parse_id(want);
+    return `Godot${id}`;
+  }
+  async onAcceptWantAsync(want: Want): Promise<string> {
+    let id = this.parse_id(want);
+    return `Godot${id}`;
+  }
 
-float ohos_wrapper_get_display_refresh_rate() {
-	uint32_t refresh_rate = 0;
-	OH_NativeDisplayManager_GetDefaultDisplayRefreshRate(&refresh_rate);
-	return refresh_rate;
-}
-
-WrapperScreenOrientation ohos_wrapper_get_display_orientation() {
-	NativeDisplayManager_Orientation orientation;
-	OH_NativeDisplayManager_GetDefaultDisplayOrientation(&orientation);
-	switch (orientation) {
-		case DISPLAY_MANAGER_PORTRAIT:
-			return WrapperScreenOrientation::WRAPPER_SCREEN_PORTRAIT;
-		case DISPLAY_MANAGER_LANDSCAPE:
-			return WrapperScreenOrientation::WRAPPER_SCREEN_LANDSCAPE;
-		case DISPLAY_MANAGER_PORTRAIT_INVERTED:
-			return WrapperScreenOrientation::WRAPPER_SCREEN_REVERSE_PORTRAIT;
-		case DISPLAY_MANAGER_LANDSCAPE_INVERTED:
-			return WrapperScreenOrientation::WRAPPER_SCREEN_REVERSE_LANDSCAPE;
-		default:
-			return WrapperScreenOrientation::WRAPPER_SCREEN_PORTRAIT;
-	}
-}
-
-void ohos_wrapper_screen_set_keep_on(int32_t window_id, bool p_enable) {
-	OH_WindowManager_SetWindowKeepScreenOn(window_id, p_enable);
-}
-
-bool ohos_wrapper_screen_is_kept_on(int32_t window_id) {
-	WindowManager_WindowProperties properties;
-	OH_WindowManager_GetWindowProperties(window_id, &properties);
-	return properties.isKeepScreenOn;
-}
-
-int ohos_wrapper_get_keyboard_avoid_area(int32_t window_id) {
-	WindowManager_AvoidArea area;
-	OH_WindowManager_GetWindowAvoidArea(window_id, WINDOW_MANAGER_AVOID_AREA_TYPE_KEYBOARD, &area);
-	return area.bottomRect.height;
+  onNewProcessRequest(want: Want): string {
+    let id = this.parse_id(want);
+    return `GodotProcess${id}`;
+  }
+  async onNewProcessRequestAsync(want: Want): Promise<string> {
+    let id = this.parse_id(want);
+    return `GodotProcess${id}`;
+  }
 }

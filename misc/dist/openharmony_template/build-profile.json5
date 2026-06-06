@@ -5,9 +5,15 @@
       {
         "name": "default",
         "signingConfig": "default",
-        "targetSdkVersion": "5.1.0(18)",
-        "compatibleSdkVersion": "5.1.0(18)",
+        "targetSdkVersion": "6.1.1(24)",
+        "compatibleSdkVersion": "6.0.2(22)",
         "runtimeOS": "HarmonyOS",
+        "bundleName": "test.rind.fun",
+        "vendor": "example",
+        "versionCode": 1000000,
+        "versionName": "1.0.0.0",
+        "icon": "$media:layered_image",
+        "label": "$string:app_name",
         "buildOption": {
           "strictMode": {
             "caseSensitiveCheck": true,
@@ -18,7 +24,7 @@
     ],
     "buildModeSet": [
       {
-        "name": "debug",
+        "name": "debug"
       },
       {
         "name": "release"
