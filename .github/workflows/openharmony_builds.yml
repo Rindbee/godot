@@ -13,7 +13,7 @@ env:
     OPENHARMONY_SDK_PATH="$HOME/OpenHarmony/"
 
   NDK_REPO: "Rindbee/OpenHarmony-NDK-public"
-  NDK_VERSION: "5.1.0.107"
+  NDK_VERSION: "6.1.0.31"
 
 jobs:
   build-openharmony:

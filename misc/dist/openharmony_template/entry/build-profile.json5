@@ -1,11 +1,12 @@
 {
   "apiType": "stageMode",
   "buildOption": {
-    "externalNativeOptions": {
-      "path": "./src/main/cpp/CMakeLists.txt",
-      "arguments": "",
-      "cppFlags": "",
-      "abiFilters": ["arm64-v8a"],
+    "arkOptions": {
+      "runtimeOnly": {
+        "sources": [
+          "./src/main/ets/utils/AbilityUtils.ets"
+        ]
+      }
     }
   },
   "buildOptionSet": [
@@ -23,18 +24,18 @@
       },
       "nativeLib": {
         "debugSymbol": {
-          "strip": true,
+          "strip": false,
           "exclude": []
         }
       }
-    },
+    }
   ],
   "targets": [
     {
       "name": "default"
     },
     {
-      "name": "ohosTest",
+      "name": "ohosTest"
     }
   ]
 }

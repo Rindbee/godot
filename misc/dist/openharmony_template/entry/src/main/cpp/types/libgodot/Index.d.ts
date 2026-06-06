@@ -29,48 +29,25 @@
 /**************************************************************************/
 
 import { resourceManager } from "@kit.LocalizationKit";
+import { NodeContent } from "@ohos.arkui.node";
 
-export class SimplifiedTouchEvent {
-  public type: number
-  public id: number
-  public x: number
-  public y: number
-}
+export declare function initialize(
+  context: UIAbilityContext,
+  resourceManager: resourceManager.ResourceManager,
+  args: string,
+): boolean;
+export declare function finalize(): boolean;
 
-export class SimplifiedKeyEvent {
-  public code: number
-  public unicode: number
-  public pressed: boolean
-  public alt: boolean
-  public ctrl: boolean
-  public shift: boolean
-  public meta: boolean
-}
+export declare function setMainWindowId(windowId: number): boolean;
+export declare function is_started(): boolean;
+export declare function iteration(): boolean;
+export declare function stop(): void;
 
-export class SimplifiedMouseEvent {
-  public type: number
-  public button: number
-  public mask: number
-  public x: number
-  public y: number
-}
+export declare function focus_out(): void;
+export declare function focus_in(): void;
+export declare function pause(): void;
+export declare function resume(): void;
 
-export const setResourceManager: (resourceManager: resourceManager.ResourceManager) => any;
+export declare function createNativeNode(windowId: number, content: NodeContent): void;
 
-export const setWindowId: (id: number) => any;
-
-export const setSurfaceId: (id: BigInt) => any;
-
-export const changeSurface: (id: BigInt, w: number, h: number) => any;
-
-export const destroySurface: (id: BigInt) => any;
-
-export const sendWindowEvent: (id: number) => any;
-
-export const setup: (allowed_permissions: string) => any;
-
-export const inputTouch: (events: SimplifiedTouchEvent[]) => any;
-
-export const inputKey: (events: SimplifiedKeyEvent) => any;
-
-export const inputMouse: (events: SimplifiedMouseEvent) => any;
+export declare function requestPermissionResult(permissions: string[], authResults: number[]): void;
