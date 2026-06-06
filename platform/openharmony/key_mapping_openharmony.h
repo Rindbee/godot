@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  file_access_openharmony.h                                             */
+/*  key_mapping_openharmony.h                                             */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,51 +30,30 @@
 
 #pragma once
 
-#include "drivers/unix/file_access_unix.h"
+#include "core/os/keyboard.h"
+#include "core/templates/hash_map.h"
 
-struct RawFile64;
+// This provides translation from OpenHarmony virtual key codes to Godot and back.
+// Values can be found in <ace/xcomponent/native_xcomponent_key_event.h> and/or
+// <multimodalinput/oh_key_code.h>.
 
-class FileAccessOpenHarmony : public FileAccessUnix {
-	GDSOFTCLASS(FileAccessOpenHarmony, FileAccessUnix);
+class KeyMappingOpenHarmony {
+	struct HashMapHasherKeys {
+		static _FORCE_INLINE_ uint32_t hash(const Key p_key) { return hash_fmix32(static_cast<uint32_t>(p_key)); }
+		static _FORCE_INLINE_ uint32_t hash(const int32_t p_key) { return hash_fmix32(p_key); }
+	};
 
-	RawFile64 *rawfile = nullptr;
-	bool is_rawfile = false;
-	String cpath;
+	static inline HashMap<int32_t, Key, HashMapHasherKeys> keysym_maps;
+	static inline HashMap<Key, int32_t, HashMapHasherKeys> keysym_map_inv;
+	static inline HashMap<int32_t, KeyLocation, HashMapHasherKeys> location_map;
 
-protected:
-	bool is_in_bundle(String p_path);
+	KeyMappingOpenHarmony() {}
 
 public:
-	static Error get_rawfile_content(const char *p_path, String &r_content);
+	static void initialize();
 
-	virtual Error open_internal(const String &p_path, int p_mode_flags) override;
-	virtual bool is_open() const override;
-
-	virtual String get_path() const override;
-	virtual String get_path_absolute() const override;
-
-	virtual void seek(uint64_t p_position) override;
-	virtual void seek_end(int64_t p_position = 0) override;
-	virtual uint64_t get_position() const override;
-	virtual uint64_t get_length() const override;
-
-	virtual bool eof_reached() const override;
-	virtual uint64_t get_buffer(uint8_t *p_dst, uint64_t p_length) const override;
-
-	virtual Error get_error() const override;
-
-	virtual Error resize(int64_t p_length) override;
-	virtual void flush() override;
-	virtual bool store_buffer(const uint8_t *p_src, uint64_t p_length) override;
-
-	virtual bool file_exists(const String &p_path) override;
-
-	virtual uint64_t _get_modified_time(const String &p_file) override;
-	virtual BitField<FileAccess::UnixPermissionFlags> _get_unix_permissions(const String &p_file) override;
-	virtual Error _set_unix_permissions(const String &p_file, BitField<FileAccess::UnixPermissionFlags> p_permissions) override;
-
-	virtual void close() override;
-
-	FileAccessOpenHarmony();
-	virtual ~FileAccessOpenHarmony();
+	static bool is_sym_numpad(int32_t p_keysym);
+	static Key map_key(int32_t p_keysym); // Translates an OpenHarmony keycode to a Godot keycode.
+	static int32_t unmap_key(Key p_key); // Translates a Godot keycode to an OpenHarmony keycode.
+	static KeyLocation get_location(int32_t p_keysym);
 };
