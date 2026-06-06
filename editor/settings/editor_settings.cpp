@@ -679,7 +679,14 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
 
 	// Directories
 	EDITOR_SETTING(Variant::STRING, PROPERTY_HINT_GLOBAL_DIR, "filesystem/directories/autoscan_project_path", "", "")
+#ifdef OPENHARMONY_ENABLED
+	String fs_dir_default_project_path = OS::get_singleton()->get_system_dir(OS::SYSTEM_DIR_DOCUMENTS);
+	if (fs_dir_default_project_path.is_empty()) {
+		fs_dir_default_project_path = OS::get_singleton()->get_data_path();
+	}
+#else
 	const String fs_dir_default_project_path = OS::get_singleton()->has_environment("HOME") ? OS::get_singleton()->get_environment("HOME") : OS::get_singleton()->get_system_dir(OS::SYSTEM_DIR_DOCUMENTS);
+#endif // OPENHARMONY_ENABLED
 	EDITOR_SETTING_BASIC(Variant::STRING, PROPERTY_HINT_GLOBAL_DIR, "filesystem/directories/default_project_path", fs_dir_default_project_path, "")
 
 	// On save

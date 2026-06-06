@@ -1285,7 +1285,7 @@ void UnixTerminalLogger::log_error(const char *p_function, const char *p_file, i
 UnixTerminalLogger::~UnixTerminalLogger() {}
 
 OS_Unix::OS_Unix() {
-#if !defined(__GLIBC__) && !defined(WEB_ENABLED)
+#if !defined(__GLIBC__) && !defined(WEB_ENABLED) && !defined(OPENHARMONY_ENABLED)
 	_load_iconv();
 #endif
 

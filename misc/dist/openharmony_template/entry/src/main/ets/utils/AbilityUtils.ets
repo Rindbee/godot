@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  audio_driver_openharmony.h                                            */
+/*  AbilityUtils.ets                                                      */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,60 +28,74 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+import { common, Want, StartOptions } from "@kit.AbilityKit";
+import { hilog } from "@kit.PerformanceAnalysisKit";
 
-#include "core/os/mutex.h"
-#include "servers/audio/audio_server.h"
+const DOMAIN = 0x0000;
+const TAG = "testTag";
 
-typedef struct OH_AudioStreamBuilderStruct OH_AudioStreamBuilder;
-typedef struct OH_AudioRendererStruct OH_AudioRenderer;
-typedef struct OH_AudioCapturerStruct OH_AudioCapturer;
-struct OH_AudioDeviceDescriptorArray;
+export function startAbility(
+  context: common.UIAbilityContext,
+  project_id: string,
+  arg_str: string,
+): boolean {
+  if (context === undefined || context === null) {
+    hilog.error(DOMAIN, TAG, "startAbility failed: context is null.");
+    return false;
+  }
 
-class AudioDriverOpenHarmony : public AudioDriver {
-	int mix_rate = 0;
-	int target_latency_ms = 0;
-	int buffer_frames = 0;
-	int32_t buffer_samples = 0;
+  let want: Want = {
+    deviceId: "",
+    bundleName: context.abilityInfo.bundleName,
+    moduleName: context.abilityInfo.moduleName,
+    abilityName: context.abilityInfo.name,
+    parameters: {
+      godot_project_id: project_id,
+      godot_args: arg_str,
+    },
+  };
+  let options: StartOptions = {
+    displayId: context.config.displayId,
+  };
 
-	bool active = false;
-	Mutex mutex;
-	std::atomic<bool> pause{ false };
+  let succeed = true;
+  try {
+    context.startAbility(want, options, (err: BusinessError) => {
+      if (err.code) {
+        hilog.error(DOMAIN, TAG, "startAbility failed: %{public}s.", JSON.stringify(err));
+        succeed = false;
+        return;
+      }
+      hilog.info(DOMAIN, TAG, "startAbility succeed.");
+    });
+  } catch (err) {
+    hilog.error(DOMAIN, TAG, "startAbility failed: %{public}s.", JSON.stringify(err));
+    succeed = false;
+  }
 
-	int32_t *mixdown_buffer = nullptr;
+  return succeed;
+}
 
-	OH_AudioStreamBuilder *audio_stream_builder = nullptr;
-	OH_AudioRenderer *audio_renderer = nullptr;
+export function terminateSelf(context: common.UIAbilityContext): boolean {
+  if (context === undefined || context === null) {
+    hilog.error(DOMAIN, TAG, "terminateSelf failed: context is null.");
+    return false;
+  }
 
-	int32_t _write_renderer_data(OH_AudioRenderer *p_renderer, void *p_audio_data, int32_t p_audio_data_size);
-	static int32_t _renderer_write_data_callback(OH_AudioRenderer *p_renderer, void *p_user_data, void *p_audio_data, int32_t p_audio_data_size);
+  let succeed = true;
+  try {
+    context.terminateSelf((err: BusinessError) => {
+      if (err.code) {
+        hilog.error(DOMAIN, TAG, "terminateSelf failed: %{public}s.", JSON.stringify(err));
+        succeed = false;
+        return;
+      }
+      hilog.info(DOMAIN, TAG, "terminateSelf succeed.");
+    });
+  } catch (err) {
+    hilog.error(DOMAIN, TAG, "terminateSelf failed: %{public}s.", JSON.stringify(err));
+    succeed = false;
+  }
 
-	OH_AudioStreamBuilder *audio_stream_capture_builder = nullptr;
-	OH_AudioCapturer *audio_capturer = nullptr;
-
-	// Capturer callback functions.
-	int32_t _capturer_read_data(OH_AudioCapturer *p_capturer, void *p_buffer, int32_t p_length);
-
-	static void _capturer_read_data_callback(OH_AudioCapturer *p_capturer, void *p_user_data, void *p_buffer, int32_t p_length);
-	static void _capturer_device_change_callback(OH_AudioCapturer *p_capturer, void *p_user_data, OH_AudioDeviceDescriptorArray *p_device_array);
-
-public:
-	virtual const char *get_name() const override { return "OpenHarmony"; }
-
-	virtual Error init() override;
-	virtual void start() override;
-	virtual int get_mix_rate() const override;
-	virtual SpeakerMode get_speaker_mode() const override;
-
-	virtual void lock() override;
-	virtual void unlock() override;
-	virtual void finish() override;
-
-	virtual Error input_start() override;
-	virtual Error input_stop() override;
-
-	void set_pause(bool p_pause);
-
-	AudioDriverOpenHarmony();
-	~AudioDriverOpenHarmony();
-};
+  return succeed;
+}

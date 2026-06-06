@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  Index.d.ts                                                            */
+/*  window_data_openharmony.cpp                                           */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,49 +28,49 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-import { resourceManager } from "@kit.LocalizationKit";
+#include "window_data_openharmony.h"
 
-export class SimplifiedTouchEvent {
-  public type: number
-  public id: number
-  public x: number
-  public y: number
+#include <window_manager/oh_window.h>
+
+bool WindowData::setup(int32_t p_native_window_id) {
+	WindowManager_WindowProperties window_properties;
+	if (OH_WindowManager_GetWindowProperties(p_native_window_id, &window_properties) != OK) {
+		return false;
+	}
+	position[0] = window_properties.windowRect.posX;
+	position[1] = window_properties.windowRect.posY;
+	size[0] = window_properties.windowRect.width;
+	size[1] = window_properties.windowRect.height;
+
+	drawable_position[0] = window_properties.drawableRect.posX;
+	drawable_position[1] = window_properties.drawableRect.posY;
+	drawable_size[0] = window_properties.drawableRect.width;
+	drawable_size[1] = window_properties.drawableRect.height;
+
+	switch (window_properties.type) {
+		case WINDOW_MANAGER_WINDOW_TYPE_APP: {
+			type = TYPE_APP;
+		} break;
+		case WINDOW_MANAGER_WINDOW_TYPE_MAIN: {
+			type = TYPE_MAIN;
+		} break;
+		case WINDOW_MANAGER_WINDOW_TYPE_FLOAT: {
+			type = TYPE_FLOAT;
+		} break;
+		case WINDOW_MANAGER_WINDOW_TYPE_DIALOG: {
+			type = TYPE_DIALOG;
+		} break;
+	}
+	is_fullscreen = window_properties.isFullScreen;
+	is_layout_fullscreen = window_properties.isLayoutFullScreen;
+	focusable = window_properties.focusable;
+	touchable = window_properties.touchable;
+	brightness = window_properties.brightness;
+	is_keep_screen_on = window_properties.isKeepScreenOn;
+	is_privacy_mode = window_properties.isPrivacyMode;
+	is_transparent = window_properties.isTransparent;
+	native_window_id = window_properties.id;
+	native_display_id = window_properties.displayId;
+
+	return true;
 }
-
-export class SimplifiedKeyEvent {
-  public code: number
-  public unicode: number
-  public pressed: boolean
-  public alt: boolean
-  public ctrl: boolean
-  public shift: boolean
-  public meta: boolean
-}
-
-export class SimplifiedMouseEvent {
-  public type: number
-  public button: number
-  public mask: number
-  public x: number
-  public y: number
-}
-
-export const setResourceManager: (resourceManager: resourceManager.ResourceManager) => any;
-
-export const setWindowId: (id: number) => any;
-
-export const setSurfaceId: (id: BigInt) => any;
-
-export const changeSurface: (id: BigInt, w: number, h: number) => any;
-
-export const destroySurface: (id: BigInt) => any;
-
-export const sendWindowEvent: (id: number) => any;
-
-export const setup: (allowed_permissions: string) => any;
-
-export const inputTouch: (events: SimplifiedTouchEvent[]) => any;
-
-export const inputKey: (events: SimplifiedKeyEvent) => any;
-
-export const inputMouse: (events: SimplifiedMouseEvent) => any;

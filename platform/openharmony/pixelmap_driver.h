@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  audio_driver_openharmony.h                                            */
+/*  pixelmap_driver.h                                                     */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,58 +30,20 @@
 
 #pragma once
 
-#include "core/os/mutex.h"
-#include "servers/audio/audio_server.h"
+#include "core/io/image.h"
 
-typedef struct OH_AudioStreamBuilderStruct OH_AudioStreamBuilder;
-typedef struct OH_AudioRendererStruct OH_AudioRenderer;
-typedef struct OH_AudioCapturerStruct OH_AudioCapturer;
-struct OH_AudioDeviceDescriptorArray;
+struct OH_PixelmapNative;
 
-class AudioDriverOpenHarmony : public AudioDriver {
-	int mix_rate = 0;
-	int target_latency_ms = 0;
-	int buffer_frames = 0;
-	int32_t buffer_samples = 0;
+namespace PixelmapDriver {
 
-	bool active = false;
-	Mutex mutex;
-	std::atomic<bool> pause{ false };
+Image::Format format_map_pixelmap_to_image(int32_t p_pixel_format);
+int32_t format_map_image_to_pixelmap(Image::Format p_format);
+int32_t get_pixel_bytes(int32_t p_pixel_format);
 
-	int32_t *mixdown_buffer = nullptr;
+Error pixelmap_get_data_rect(OH_PixelmapNative *p_pixelmap, const Rect2i p_rect, Vector<uint8_t> &r_data);
+Color pixelmap_get_color(OH_PixelmapNative *p_pixelmap, const Point2i &p_position, Error &r_error);
+Error pixelmap_get_image_rect(OH_PixelmapNative *p_pixelmap, const Rect2i p_rect, Ref<Image> &r_image);
+Error pixelmap_to_image(OH_PixelmapNative *p_pixelmap, Ref<Image> &r_image);
+Error image_to_pixelmap(const Ref<Image> &p_image, OH_PixelmapNative *r_pixelmap);
 
-	OH_AudioStreamBuilder *audio_stream_builder = nullptr;
-	OH_AudioRenderer *audio_renderer = nullptr;
-
-	int32_t _write_renderer_data(OH_AudioRenderer *p_renderer, void *p_audio_data, int32_t p_audio_data_size);
-	static int32_t _renderer_write_data_callback(OH_AudioRenderer *p_renderer, void *p_user_data, void *p_audio_data, int32_t p_audio_data_size);
-
-	OH_AudioStreamBuilder *audio_stream_capture_builder = nullptr;
-	OH_AudioCapturer *audio_capturer = nullptr;
-
-	// Capturer callback functions.
-	int32_t _capturer_read_data(OH_AudioCapturer *p_capturer, void *p_buffer, int32_t p_length);
-
-	static void _capturer_read_data_callback(OH_AudioCapturer *p_capturer, void *p_user_data, void *p_buffer, int32_t p_length);
-	static void _capturer_device_change_callback(OH_AudioCapturer *p_capturer, void *p_user_data, OH_AudioDeviceDescriptorArray *p_device_array);
-
-public:
-	virtual const char *get_name() const override { return "OpenHarmony"; }
-
-	virtual Error init() override;
-	virtual void start() override;
-	virtual int get_mix_rate() const override;
-	virtual SpeakerMode get_speaker_mode() const override;
-
-	virtual void lock() override;
-	virtual void unlock() override;
-	virtual void finish() override;
-
-	virtual Error input_start() override;
-	virtual Error input_stop() override;
-
-	void set_pause(bool p_pause);
-
-	AudioDriverOpenHarmony();
-	~AudioDriverOpenHarmony();
-};
+}; // namespace PixelmapDriver

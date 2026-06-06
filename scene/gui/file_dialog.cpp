@@ -1546,6 +1546,8 @@ void FileDialog::set_access(Access p_access) {
 			dir_access = DirAccess::create(DirAccess::ACCESS_FILESYSTEM);
 #ifdef ANDROID_ENABLED
 			set_current_dir(OS::get_singleton()->get_system_dir(OS::SYSTEM_DIR_DESKTOP));
+#elif defined(OPENHARMONY_ENABLED)
+			set_current_dir(OS::get_singleton()->get_data_path());
 #endif
 		} break;
 		case ACCESS_RESOURCES: {

@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  audio_driver_openharmony.h                                            */
+/*  key_mapping_openharmony.h                                             */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,58 +30,30 @@
 
 #pragma once
 
-#include "core/os/mutex.h"
-#include "servers/audio/audio_server.h"
+#include "core/os/keyboard.h"
+#include "core/templates/hash_map.h"
 
-typedef struct OH_AudioStreamBuilderStruct OH_AudioStreamBuilder;
-typedef struct OH_AudioRendererStruct OH_AudioRenderer;
-typedef struct OH_AudioCapturerStruct OH_AudioCapturer;
-struct OH_AudioDeviceDescriptorArray;
+// This provides translation from OpenHarmony virtual key codes to Godot and back.
+// Values can be found in <ace/xcomponent/native_xcomponent_key_event.h> and/or
+// <multimodalinput/oh_key_code.h>.
 
-class AudioDriverOpenHarmony : public AudioDriver {
-	int mix_rate = 0;
-	int target_latency_ms = 0;
-	int buffer_frames = 0;
-	int32_t buffer_samples = 0;
+class KeyMappingOpenHarmony {
+	struct HashMapHasherKeys {
+		static _FORCE_INLINE_ uint32_t hash(const Key p_key) { return hash_fmix32(static_cast<uint32_t>(p_key)); }
+		static _FORCE_INLINE_ uint32_t hash(const int32_t p_key) { return hash_fmix32(p_key); }
+	};
 
-	bool active = false;
-	Mutex mutex;
-	std::atomic<bool> pause{ false };
+	static inline HashMap<int32_t, Key, HashMapHasherKeys> keysym_maps;
+	static inline HashMap<Key, int32_t, HashMapHasherKeys> keysym_map_inv;
+	static inline HashMap<int32_t, KeyLocation, HashMapHasherKeys> location_map;
 
-	int32_t *mixdown_buffer = nullptr;
-
-	OH_AudioStreamBuilder *audio_stream_builder = nullptr;
-	OH_AudioRenderer *audio_renderer = nullptr;
-
-	int32_t _write_renderer_data(OH_AudioRenderer *p_renderer, void *p_audio_data, int32_t p_audio_data_size);
-	static int32_t _renderer_write_data_callback(OH_AudioRenderer *p_renderer, void *p_user_data, void *p_audio_data, int32_t p_audio_data_size);
-
-	OH_AudioStreamBuilder *audio_stream_capture_builder = nullptr;
-	OH_AudioCapturer *audio_capturer = nullptr;
-
-	// Capturer callback functions.
-	int32_t _capturer_read_data(OH_AudioCapturer *p_capturer, void *p_buffer, int32_t p_length);
-
-	static void _capturer_read_data_callback(OH_AudioCapturer *p_capturer, void *p_user_data, void *p_buffer, int32_t p_length);
-	static void _capturer_device_change_callback(OH_AudioCapturer *p_capturer, void *p_user_data, OH_AudioDeviceDescriptorArray *p_device_array);
+	KeyMappingOpenHarmony() {}
 
 public:
-	virtual const char *get_name() const override { return "OpenHarmony"; }
+	static void initialize();
 
-	virtual Error init() override;
-	virtual void start() override;
-	virtual int get_mix_rate() const override;
-	virtual SpeakerMode get_speaker_mode() const override;
-
-	virtual void lock() override;
-	virtual void unlock() override;
-	virtual void finish() override;
-
-	virtual Error input_start() override;
-	virtual Error input_stop() override;
-
-	void set_pause(bool p_pause);
-
-	AudioDriverOpenHarmony();
-	~AudioDriverOpenHarmony();
+	static bool is_sym_numpad(int32_t p_keysym);
+	static Key map_key(int32_t p_keysym); // Translates an OpenHarmony keycode to a Godot keycode.
+	static int32_t unmap_key(Key p_key); // Translates a Godot keycode to an OpenHarmony keycode.
+	static KeyLocation get_location(int32_t p_keysym);
 };
