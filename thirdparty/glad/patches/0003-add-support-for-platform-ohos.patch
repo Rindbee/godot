@@ -1,0 +1,31 @@
+diff --git a/thirdparty/glad/EGL/eglplatform.h b/thirdparty/glad/EGL/eglplatform.h
+index 6786afd90b6..5c3ac424c7c 100644
+--- a/thirdparty/glad/EGL/eglplatform.h
++++ b/thirdparty/glad/EGL/eglplatform.h
+@@ -54,6 +54,14 @@ typedef void *EGLNativeDisplayType;
+ typedef void *EGLNativePixmapType;
+ typedef void *EGLNativeWindowType;
+ 
++#elif defined(OHOS_PLATFORM)
++
++struct NativeWindow;
++
++typedef void*                   EGLNativeDisplayType;
++typedef void*                   EGLNativePixmapType;
++typedef struct NativeWindow*    EGLNativeWindowType;
++
+ #elif defined(_WIN32) || defined(__VC32__) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__) /* Win32 and WinCE */
+ #ifndef WIN32_LEAN_AND_MEAN
+ #define WIN32_LEAN_AND_MEAN 1
+diff --git a/thirdparty/glad/glad/egl.h b/thirdparty/glad/glad/egl.h
+index e8363c8735b..d3bc6216a25 100644
+--- a/thirdparty/glad/glad/egl.h
++++ b/thirdparty/glad/glad/egl.h
+@@ -271,6 +271,7 @@ typedef void (*GLADpostcallback)(void *ret, const char *name, GLADapiproc apipro
+ #define EGL_PLATFORM_WAYLAND_KHR 0x31D8
+ #define EGL_PLATFORM_X11_KHR 0x31D5
+ #define EGL_PLATFORM_X11_SCREEN_KHR 0x31D6
++#define EGL_PLATFORM_OHOS_KHR 0x34E0
+ #define EGL_READ 0x305A
+ #define EGL_RED_SIZE 0x3024
+ #define EGL_RENDERABLE_TYPE 0x3040

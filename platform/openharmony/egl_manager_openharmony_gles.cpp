@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  Index.d.ts                                                            */
+/*  egl_manager_openharmony_gles.cpp                                      */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,49 +28,39 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-import { resourceManager } from "@kit.LocalizationKit";
+#include "egl_manager_openharmony_gles.h"
 
-export class SimplifiedTouchEvent {
-  public type: number
-  public id: number
-  public x: number
-  public y: number
+#ifdef OPENHARMONY_ENABLED
+#ifdef EGL_ENABLED
+#ifdef GLES3_ENABLED
+
+const char *EGLManagerOpenHarmonyGLES::_get_platform_extension_name() const {
+	return "EGL_KHR_platform_ohos";
 }
 
-export class SimplifiedKeyEvent {
-  public code: number
-  public unicode: number
-  public pressed: boolean
-  public alt: boolean
-  public ctrl: boolean
-  public shift: boolean
-  public meta: boolean
+EGLenum EGLManagerOpenHarmonyGLES::_get_platform_extension_enum() const {
+	return EGL_PLATFORM_OHOS_KHR;
 }
 
-export class SimplifiedMouseEvent {
-  public type: number
-  public button: number
-  public mask: number
-  public x: number
-  public y: number
+EGLenum EGLManagerOpenHarmonyGLES::_get_platform_api_enum() const {
+	return EGL_OPENGL_ES_API;
 }
 
-export const setResourceManager: (resourceManager: resourceManager.ResourceManager) => any;
+Vector<EGLAttrib> EGLManagerOpenHarmonyGLES::_get_platform_display_attributes() const {
+	return Vector<EGLAttrib>();
+}
 
-export const setWindowId: (id: number) => any;
+Vector<EGLint> EGLManagerOpenHarmonyGLES::_get_platform_context_attribs() const {
+	Vector<EGLint> ret;
+	ret.push_back(EGL_CONTEXT_MAJOR_VERSION);
+	ret.push_back(3);
+	ret.push_back(EGL_CONTEXT_MINOR_VERSION);
+	ret.push_back(2);
+	ret.push_back(EGL_NONE);
 
-export const setSurfaceId: (id: BigInt) => any;
+	return ret;
+}
 
-export const changeSurface: (id: BigInt, w: number, h: number) => any;
-
-export const destroySurface: (id: BigInt) => any;
-
-export const sendWindowEvent: (id: number) => any;
-
-export const setup: (allowed_permissions: string) => any;
-
-export const inputTouch: (events: SimplifiedTouchEvent[]) => any;
-
-export const inputKey: (events: SimplifiedKeyEvent) => any;
-
-export const inputMouse: (events: SimplifiedMouseEvent) => any;
+#endif // GLES3_ENABLED
+#endif // EGL_ENABLED
+#endif // OPENHARMONY_ENABLED

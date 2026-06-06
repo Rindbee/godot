@@ -373,7 +373,7 @@ void RenderSceneBuffersGLES3::_check_render_buffers() {
 			glBindTexture(GL_TEXTURE_2D_MULTISAMPLE_ARRAY, 0);
 			glBindFramebuffer(GL_FRAMEBUFFER, GLES3::TextureStorage::system_fbo);
 #endif
-#if defined(ANDROID_ENABLED) || defined(WEB_ENABLED) // Only supported on OpenGLES!
+#if defined(ANDROID_ENABLED) || defined(WEB_ENABLED) || defined(OPENHARMONY_ENABLED) // Only supported on OpenGLES!
 		} else if (!use_internal_buffer) {
 			// We are going to render directly into our render target textures,
 			// these can change from frame to frame as we cycle through swapchains,

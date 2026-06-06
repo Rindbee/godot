@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  file_access_openharmony.h                                             */
+/*  pixelmap_driver.h                                                     */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,51 +30,20 @@
 
 #pragma once
 
-#include "drivers/unix/file_access_unix.h"
+#include "core/io/image.h"
 
-struct RawFile64;
+struct OH_PixelmapNative;
 
-class FileAccessOpenHarmony : public FileAccessUnix {
-	GDSOFTCLASS(FileAccessOpenHarmony, FileAccessUnix);
+namespace PixelmapDriver {
 
-	RawFile64 *rawfile = nullptr;
-	bool is_rawfile = false;
-	String cpath;
+Image::Format format_map_pixelmap_to_image(int32_t p_pixel_format);
+int32_t format_map_image_to_pixelmap(Image::Format p_format);
+int32_t get_pixel_bytes(int32_t p_pixel_format);
 
-protected:
-	bool is_in_bundle(String p_path);
+Error pixelmap_get_data_rect(OH_PixelmapNative *p_pixelmap, const Rect2i p_rect, Vector<uint8_t> &r_data);
+Color pixelmap_get_color(OH_PixelmapNative *p_pixelmap, const Point2i &p_position, Error &r_error);
+Error pixelmap_get_image_rect(OH_PixelmapNative *p_pixelmap, const Rect2i p_rect, Ref<Image> &r_image);
+Error pixelmap_to_image(OH_PixelmapNative *p_pixelmap, Ref<Image> &r_image);
+Error image_to_pixelmap(const Ref<Image> &p_image, OH_PixelmapNative *r_pixelmap);
 
-public:
-	static Error get_rawfile_content(const char *p_path, String &r_content);
-
-	virtual Error open_internal(const String &p_path, int p_mode_flags) override;
-	virtual bool is_open() const override;
-
-	virtual String get_path() const override;
-	virtual String get_path_absolute() const override;
-
-	virtual void seek(uint64_t p_position) override;
-	virtual void seek_end(int64_t p_position = 0) override;
-	virtual uint64_t get_position() const override;
-	virtual uint64_t get_length() const override;
-
-	virtual bool eof_reached() const override;
-	virtual uint64_t get_buffer(uint8_t *p_dst, uint64_t p_length) const override;
-
-	virtual Error get_error() const override;
-
-	virtual Error resize(int64_t p_length) override;
-	virtual void flush() override;
-	virtual bool store_buffer(const uint8_t *p_src, uint64_t p_length) override;
-
-	virtual bool file_exists(const String &p_path) override;
-
-	virtual uint64_t _get_modified_time(const String &p_file) override;
-	virtual BitField<FileAccess::UnixPermissionFlags> _get_unix_permissions(const String &p_file) override;
-	virtual Error _set_unix_permissions(const String &p_file, BitField<FileAccess::UnixPermissionFlags> p_permissions) override;
-
-	virtual void close() override;
-
-	FileAccessOpenHarmony();
-	virtual ~FileAccessOpenHarmony();
-};
+}; // namespace PixelmapDriver

@@ -33,17 +33,13 @@
 #include "dir_access_openharmony.h"
 #include "os_openharmony.h"
 
-NativeResourceManager *FileAccessOpenHarmony::resource_manager = nullptr;
-
-void FileAccessOpenHarmony::setup(NativeResourceManager *p_resource_manager) {
-	FileAccessOpenHarmony::resource_manager = p_resource_manager;
-}
+#include <rawfile/raw_file_manager.h>
 
 Error FileAccessOpenHarmony::get_rawfile_content(const char *p_path, String &r_content) {
-	if (resource_manager == nullptr) {
+	if (OS_OpenHarmony::get_singleton()->get_native_resource_manager() == nullptr) {
 		return ERR_FILE_NOT_FOUND;
 	}
-	RawFile64 *rawfile = OH_ResourceManager_OpenRawFile64(resource_manager, p_path);
+	RawFile64 *rawfile = OH_ResourceManager_OpenRawFile64(OS_OpenHarmony::get_singleton()->get_native_resource_manager(), p_path);
 	if (rawfile == nullptr) {
 		return ERR_FILE_NOT_FOUND;
 	}
@@ -67,49 +63,49 @@ bool FileAccessOpenHarmony::is_in_bundle(String p_path) {
 Error FileAccessOpenHarmony::open_internal(const String &p_path, int p_mode_flags) {
 	String file = fix_path(p_path);
 	close();
-	_cpath = "";
-	_is_rawfile = false;
+	cpath = "";
+	is_rawfile = false;
 	if (is_in_bundle(file)) {
 		if (p_mode_flags != FileAccess::READ) {
 			return ERR_FILE_CANT_WRITE;
 		}
 		String rawfile_path = file.trim_prefix(OS_OpenHarmony::get_singleton()->get_bundle_resource_dir());
-		_rawfile = OH_ResourceManager_OpenRawFile64(resource_manager, rawfile_path.utf8().get_data());
-		if (_rawfile == nullptr) {
+		rawfile = OH_ResourceManager_OpenRawFile64(OS_OpenHarmony::get_singleton()->get_native_resource_manager(), rawfile_path.utf8().get_data());
+		if (rawfile == nullptr) {
 			return ERR_FILE_NOT_FOUND;
 		}
-		_cpath = file;
-		_is_rawfile = true;
+		cpath = file;
+		is_rawfile = true;
 		return OK;
 	}
 	return FileAccessUnix::open_internal(p_path, p_mode_flags);
 }
 
 bool FileAccessOpenHarmony::is_open() const {
-	if (_is_rawfile) {
-		return _rawfile != nullptr;
+	if (is_rawfile) {
+		return rawfile != nullptr;
 	}
 	return FileAccessUnix::is_open();
 }
 
 String FileAccessOpenHarmony::get_path() const {
-	if (_is_rawfile) {
-		return _cpath;
+	if (is_rawfile) {
+		return cpath;
 	}
 	return FileAccessUnix::get_path();
 }
 
 String FileAccessOpenHarmony::get_path_absolute() const {
-	if (_is_rawfile) {
-		return _cpath;
+	if (is_rawfile) {
+		return cpath;
 	}
 	return FileAccessUnix::get_path_absolute();
 }
 
 void FileAccessOpenHarmony::seek(uint64_t p_position) {
-	if (_is_rawfile) {
-		if (_rawfile) {
-			OH_ResourceManager_SeekRawFile64(_rawfile, p_position, SEEK_SET);
+	if (is_rawfile) {
+		if (rawfile) {
+			OH_ResourceManager_SeekRawFile64(rawfile, p_position, SEEK_SET);
 		}
 		return;
 	}
@@ -117,9 +113,9 @@ void FileAccessOpenHarmony::seek(uint64_t p_position) {
 }
 
 void FileAccessOpenHarmony::seek_end(int64_t p_position) {
-	if (_is_rawfile) {
-		if (_rawfile) {
-			OH_ResourceManager_SeekRawFile64(_rawfile, p_position, SEEK_END);
+	if (is_rawfile) {
+		if (rawfile) {
+			OH_ResourceManager_SeekRawFile64(rawfile, p_position, SEEK_END);
 		}
 		return;
 	}
@@ -127,9 +123,9 @@ void FileAccessOpenHarmony::seek_end(int64_t p_position) {
 }
 
 uint64_t FileAccessOpenHarmony::get_position() const {
-	if (_is_rawfile) {
-		if (_rawfile) {
-			return OH_ResourceManager_GetRawFileOffset64(_rawfile);
+	if (is_rawfile) {
+		if (rawfile) {
+			return OH_ResourceManager_GetRawFileOffset64(rawfile);
 		}
 		return 0;
 	}
@@ -137,9 +133,9 @@ uint64_t FileAccessOpenHarmony::get_position() const {
 }
 
 uint64_t FileAccessOpenHarmony::get_length() const {
-	if (_is_rawfile) {
-		if (_rawfile) {
-			return OH_ResourceManager_GetRawFileSize64(_rawfile);
+	if (is_rawfile) {
+		if (rawfile) {
+			return OH_ResourceManager_GetRawFileSize64(rawfile);
 		}
 		return 0;
 	}
@@ -147,9 +143,9 @@ uint64_t FileAccessOpenHarmony::get_length() const {
 }
 
 bool FileAccessOpenHarmony::eof_reached() const {
-	if (_is_rawfile) {
-		if (_rawfile) {
-			return OH_ResourceManager_GetRawFileRemainingLength64(_rawfile) <= 0;
+	if (is_rawfile) {
+		if (rawfile) {
+			return OH_ResourceManager_GetRawFileRemainingLength64(rawfile) <= 0;
 		}
 		return true;
 	}
@@ -157,9 +153,9 @@ bool FileAccessOpenHarmony::eof_reached() const {
 }
 
 uint64_t FileAccessOpenHarmony::get_buffer(uint8_t *p_dst, uint64_t p_length) const {
-	if (_is_rawfile) {
-		if (_rawfile) {
-			return OH_ResourceManager_ReadRawFile64(_rawfile, p_dst, p_length);
+	if (is_rawfile) {
+		if (rawfile) {
+			return OH_ResourceManager_ReadRawFile64(rawfile, p_dst, p_length);
 		}
 		return 0;
 	}
@@ -167,28 +163,28 @@ uint64_t FileAccessOpenHarmony::get_buffer(uint8_t *p_dst, uint64_t p_length) co
 }
 
 Error FileAccessOpenHarmony::get_error() const {
-	if (_is_rawfile) {
+	if (is_rawfile) {
 		return OK;
 	}
 	return FileAccessUnix::get_error();
 }
 
 Error FileAccessOpenHarmony::resize(int64_t p_length) {
-	if (_is_rawfile) {
+	if (is_rawfile) {
 		return ERR_FILE_NO_PERMISSION;
 	}
 	return FileAccessUnix::resize(p_length);
 }
 
 void FileAccessOpenHarmony::flush() {
-	if (_is_rawfile) {
+	if (is_rawfile) {
 		return;
 	}
 	FileAccessUnix::flush();
 }
 
 bool FileAccessOpenHarmony::store_buffer(const uint8_t *p_src, uint64_t p_length) {
-	if (_is_rawfile) {
+	if (is_rawfile) {
 		return false;
 	}
 	return FileAccessUnix::store_buffer(p_src, p_length);
@@ -228,10 +224,10 @@ Error FileAccessOpenHarmony::_set_unix_permissions(const String &p_file, BitFiel
 }
 
 void FileAccessOpenHarmony::close() {
-	if (_is_rawfile) {
-		if (_rawfile) {
-			OH_ResourceManager_CloseRawFile64(_rawfile);
-			_rawfile = nullptr;
+	if (is_rawfile) {
+		if (rawfile) {
+			OH_ResourceManager_CloseRawFile64(rawfile);
+			rawfile = nullptr;
 		}
 		return;
 	}
