@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  wrapper_openharmony.h                                                 */
+/*  key_mapping_openharmony.h                                             */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,20 +30,30 @@
 
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
+#include "core/os/keyboard.h"
+#include "core/templates/hash_map.h"
 
-enum WrapperScreenOrientation {
-	WRAPPER_SCREEN_LANDSCAPE,
-	WRAPPER_SCREEN_PORTRAIT,
-	WRAPPER_SCREEN_REVERSE_LANDSCAPE,
-	WRAPPER_SCREEN_REVERSE_PORTRAIT,
+// This provides translation from OpenHarmony virtual key codes to Godot and back.
+// Values can be found in <ace/xcomponent/native_xcomponent_key_event.h> and/or
+// <multimodalinput/oh_key_code.h>.
+
+class KeyMappingOpenHarmony {
+	struct HashMapHasherKeys {
+		static _FORCE_INLINE_ uint32_t hash(const Key p_key) { return hash_fmix32(static_cast<uint32_t>(p_key)); }
+		static _FORCE_INLINE_ uint32_t hash(const int32_t p_key) { return hash_fmix32(p_key); }
+	};
+
+	static inline HashMap<int32_t, Key, HashMapHasherKeys> keysym_maps;
+	static inline HashMap<Key, int32_t, HashMapHasherKeys> keysym_map_inv;
+	static inline HashMap<int32_t, KeyLocation, HashMapHasherKeys> location_map;
+
+	KeyMappingOpenHarmony() {}
+
+public:
+	static void initialize();
+
+	static bool is_sym_numpad(int32_t p_keysym);
+	static Key map_key(int32_t p_keysym); // Translates an OpenHarmony keycode to a Godot keycode.
+	static int32_t unmap_key(Key p_key); // Translates a Godot keycode to an OpenHarmony keycode.
+	static KeyLocation get_location(int32_t p_keysym);
 };
-
-int ohos_wrapper_get_display_dpi();
-float ohos_wrapper_get_display_scaled_density();
-float ohos_wrapper_get_display_refresh_rate();
-WrapperScreenOrientation ohos_wrapper_get_display_orientation();
-void ohos_wrapper_screen_set_keep_on(int32_t window_id, bool p_enable);
-bool ohos_wrapper_screen_is_kept_on(int32_t window_id);
-int ohos_wrapper_get_keyboard_avoid_area(int32_t window_id);

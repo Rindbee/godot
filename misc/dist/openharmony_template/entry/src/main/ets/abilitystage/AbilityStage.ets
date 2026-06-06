@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  bridge_openharmony.h                                                  */
+/*  AbilityStage.ets                                                      */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,42 +28,45 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+import { AbilityStage, Want } from "@kit.AbilityKit";
+import { HashMap } from "@kit.ArkTS";
 
-#include <rawfile/raw_file_manager.h>
+export default class GodotAbilityStage extends AbilityStage {
+  private project_ids: HashMap<string, number> = new HashMap();
+  private id_counter = 0;
 
-#include <cstdint>
+  private parse_id(want: Want): number {
+    let project_id = want.parameters?.godot_project_id as string;
+    if (!project_id) {
+      project_id = "ProjectManager";
+    }
+    let id = 0;
+    try {
+      if (this.project_ids.hasKey(project_id)) {
+        id = this.project_ids.get(project_id);
+      } else {
+        id = this.id_counter++;
+        this.project_ids.set(project_id, id);
+      }
+    } catch (error) {}
+    return id;
+  }
 
-extern "C" {
-typedef struct GodotTouchEvent {
-	uint32_t type;
-	uint32_t id;
-	float x;
-	float y;
-} GodotTouchEvent;
+  onAcceptWant(want: Want): string {
+    let id = this.parse_id(want);
+    return `Godot${id}`;
+  }
+  async onAcceptWantAsync(want: Want): Promise<string> {
+    let id = this.parse_id(want);
+    return `Godot${id}`;
+  }
 
-typedef struct GodotKeyEvent {
-	uint32_t code;
-	char32_t unicode;
-	bool pressed;
-	bool alt;
-	bool ctrl;
-	bool shift;
-	bool meta;
-} GodotKeyEvent;
-
-typedef struct GodotMouseEvent {
-	uint32_t type;
-	uint32_t button;
-	uint32_t mask;
-	float x;
-	float y;
-} GodotMouseEvent;
-
-int64_t godot_init(NativeResourceManager *p_resource_manager, void *p_native_window, int32_t window_id, int64_t window_width, int64_t window_height, const char *p_allowed_permissions);
-void godot_touch(GodotTouchEvent *p_event, int count);
-void godot_mouse(GodotMouseEvent *p_event);
-void godot_key(GodotKeyEvent *p_event);
-void godot_resize(uint32_t width, uint32_t height);
-void godot_window_event(int32_t event);
+  onNewProcessRequest(want: Want): string {
+    let id = this.parse_id(want);
+    return `GodotProcess${id}`;
+  }
+  async onNewProcessRequestAsync(want: Want): Promise<string> {
+    let id = this.parse_id(want);
+    return `GodotProcess${id}`;
+  }
 }

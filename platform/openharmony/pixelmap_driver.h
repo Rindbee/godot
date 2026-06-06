@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  wrapper_openharmony.cpp                                               */
+/*  pixelmap_driver.h                                                     */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,58 +28,22 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#include "wrapper_openharmony.h"
+#pragma once
 
-#include <window_manager/oh_display_manager.h>
-#include <window_manager/oh_window.h>
+#include "core/io/image.h"
 
-int ohos_wrapper_get_display_dpi() {
-	int32_t dpi = 0;
-	OH_NativeDisplayManager_GetDefaultDisplayDensityDpi(&dpi);
-	return dpi;
-}
+struct OH_PixelmapNative;
 
-float ohos_wrapper_get_display_scaled_density() {
-	float scaled_density = 0;
-	OH_NativeDisplayManager_GetDefaultDisplayScaledDensity(&scaled_density);
-	return scaled_density;
-}
+namespace PixelmapDriver {
 
-float ohos_wrapper_get_display_refresh_rate() {
-	uint32_t refresh_rate = 0;
-	OH_NativeDisplayManager_GetDefaultDisplayRefreshRate(&refresh_rate);
-	return refresh_rate;
-}
+Image::Format format_map_pixelmap_to_image(int32_t p_pixel_format);
+int32_t format_map_image_to_pixelmap(Image::Format p_format);
+int32_t get_pixel_bytes(int32_t p_pixel_format);
 
-WrapperScreenOrientation ohos_wrapper_get_display_orientation() {
-	NativeDisplayManager_Orientation orientation;
-	OH_NativeDisplayManager_GetDefaultDisplayOrientation(&orientation);
-	switch (orientation) {
-		case DISPLAY_MANAGER_PORTRAIT:
-			return WrapperScreenOrientation::WRAPPER_SCREEN_PORTRAIT;
-		case DISPLAY_MANAGER_LANDSCAPE:
-			return WrapperScreenOrientation::WRAPPER_SCREEN_LANDSCAPE;
-		case DISPLAY_MANAGER_PORTRAIT_INVERTED:
-			return WrapperScreenOrientation::WRAPPER_SCREEN_REVERSE_PORTRAIT;
-		case DISPLAY_MANAGER_LANDSCAPE_INVERTED:
-			return WrapperScreenOrientation::WRAPPER_SCREEN_REVERSE_LANDSCAPE;
-		default:
-			return WrapperScreenOrientation::WRAPPER_SCREEN_PORTRAIT;
-	}
-}
+Error pixelmap_get_data_rect(OH_PixelmapNative *p_pixelmap, const Rect2i p_rect, Vector<uint8_t> &r_data);
+Color pixelmap_get_color(OH_PixelmapNative *p_pixelmap, const Point2i &p_position, Error &r_error);
+Error pixelmap_get_image_rect(OH_PixelmapNative *p_pixelmap, const Rect2i p_rect, Ref<Image> &r_image);
+Error pixelmap_to_image(OH_PixelmapNative *p_pixelmap, Ref<Image> &r_image);
+Error image_to_pixelmap(const Ref<Image> &p_image, OH_PixelmapNative *r_pixelmap);
 
-void ohos_wrapper_screen_set_keep_on(int32_t window_id, bool p_enable) {
-	OH_WindowManager_SetWindowKeepScreenOn(window_id, p_enable);
-}
-
-bool ohos_wrapper_screen_is_kept_on(int32_t window_id) {
-	WindowManager_WindowProperties properties;
-	OH_WindowManager_GetWindowProperties(window_id, &properties);
-	return properties.isKeepScreenOn;
-}
-
-int ohos_wrapper_get_keyboard_avoid_area(int32_t window_id) {
-	WindowManager_AvoidArea area;
-	OH_WindowManager_GetWindowAvoidArea(window_id, WINDOW_MANAGER_AVOID_AREA_TYPE_KEYBOARD, &area);
-	return area.bottomRect.height;
-}
+}; // namespace PixelmapDriver
