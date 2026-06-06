@@ -28,52 +28,134 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
-import { hilog } from '@kit.PerformanceAnalysisKit';
-import { window } from '@kit.ArkUI';
-import plugin from 'libentry.so';
+import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from "@kit.AbilityKit";
+import { hilog } from "@kit.PerformanceAnalysisKit";
+import { window } from "@kit.ArkUI";
+import { abilityAccessCtrl, Permissions } from "@kit.AbilityKit";
+import plugin from "libgodot.so";
 
 const DOMAIN = 0x0000;
+const TAG = "testTag";
 
 export default class EntryAbility extends UIAbility {
+  private initialized: boolean = false;
+  private started: boolean = false;
+
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
-    this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
+    hilog.info(DOMAIN, TAG, "%{public}s", "Ability onCreate");
+
+    try {
+      let resId = $r("app.string.user_permissions").id;
+      let user_permissions = this.context.resourceManager.getStringSync(resId);
+      let user_permissions_list: Array<Permissions> = [];
+      user_permissions.split(",").forEach((value) => {
+        user_permissions_list.push(value.trim() as Permissions);
+      });
+      if (user_permissions_list.length > 0) {
+        let atManager: abilityAccessCtrl.AtManager = abilityAccessCtrl.createAtManager();
+        atManager.requestPermissionsFromUser(this.context, user_permissions_list);
+      }
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, "Permission error: %{public}s", JSON.stringify(err));
+    }
+
+    try {
+      let appContext = this.context.getApplicationContext();
+      appContext.setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, "Set color mode error: %{public}s", JSON.stringify(err));
+    }
+
+    this.initialized = plugin.initialize(this.context.resourceManager);
+    hilog.info(DOMAIN, TAG, "%{public}s", "Godot initialized.");
   }
 
   onDestroy(): void {
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onDestroy');
+    hilog.info(DOMAIN, TAG, "%{public}s", "Ability onDestroy");
+
+    if (this.initialized) {
+      plugin.finalize();
+      this.initialized = false;
+      hilog.info(DOMAIN, TAG, "%{public}s", "Godot finalized.");
+    }
   }
 
-  onWindowStageCreate(windowStage: window.WindowStage): void {
-    // Main window is created, set main page for this ability
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onWindowStageCreate');
+  async onWindowStageCreate(windowStage: window.WindowStage): Promise<void> {
+    // Main window is created, set main page for this ability.
+    hilog.info(DOMAIN, TAG, "%{public}s", "Ability onWindowStageCreate");
 
-    windowStage.on('windowStageEvent', (data) => {
-      plugin.sendWindowEvent(data);
-    });
+    let mainWindow: window.Window | null = null;
 
-    windowStage.loadContent('pages/Index', (err) => {
+    try {
+      mainWindow = await windowStage.getMainWindow();
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, "getMainWindow failed: %{public}s", JSON.stringify(err));
+      return;
+    }
+
+    if (!mainWindow) {
+      hilog.error(DOMAIN, TAG, "mainWindow is null");
+      return;
+    }
+
+    // The navigation bar cannot be shown or hidden independently.
+    try {
+      mainWindow.setWindowSystemBarEnable([]);
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, "setWindowSystemBarEnable failed: %{public}s", JSON.stringify(err));
+    }
+
+    let windowID: number = -1;
+    try {
+      windowID = mainWindow.getWindowProperties().id;
+      plugin.setMainWindowId(windowID);
+      AppStorage.setOrCreate<number>("windowID", windowID);
+      hilog.info(DOMAIN, TAG, "Window ID: %{public}d", windowID);
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, "getWindowProperties failed: %{public}s", JSON.stringify(err));
+    }
+
+    windowStage.loadContent("pages/Index", (err) => {
       if (err.code) {
-        hilog.error(DOMAIN, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
+        const templ = "Failed to load the content. Cause: %{public}s";
+        hilog.error(DOMAIN, TAG, templ, JSON.stringify(err));
         return;
       }
-      hilog.info(DOMAIN, 'testTag', 'Succeeded in loading the content.');
+      hilog.info(DOMAIN, TAG, "Succeeded in loading the content.");
+      this.started = true;
     });
   }
 
   onWindowStageDestroy(): void {
     // Main window is destroyed, release UI related resources
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onWindowStageDestroy');
+    hilog.info(DOMAIN, TAG, "%{public}s", "Ability onWindowStageDestroy");
+
+    if (this.started) {
+      plugin.stop();
+      this.started = false;
+      hilog.info(DOMAIN, TAG, "%{public}s", "Godot stopped.");
+    }
   }
 
   onForeground(): void {
     // Ability has brought to foreground
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onForeground');
+    hilog.info(DOMAIN, TAG, "%{public}s", "Ability onForeground");
+
+    if (this.started) {
+      plugin.resume();
+      plugin.focus_in();
+      hilog.info(DOMAIN, TAG, "%{public}s", "Godot resumed.");
+    }
   }
 
   onBackground(): void {
     // Ability has back to background
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
+    hilog.info(DOMAIN, TAG, "%{public}s", "Ability onBackground");
+
+    if (this.started) {
+      plugin.focus_out();
+      plugin.pause();
+      hilog.info(DOMAIN, TAG, "%{public}s", "Godot paused.");
+    }
   }
 }

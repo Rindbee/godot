@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  rendering_context_driver_vulkan_openharmony.h                         */
+/*  Index.d.ts                                                            */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,26 +28,20 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+import { resourceManager } from "@kit.LocalizationKit";
+import { NodeContent } from "@ohos.arkui.node";
 
-#ifdef VULKAN_ENABLED
+export declare function initialize(resourceManager: resourceManager.ResourceManager): boolean;
+export declare function finalize(): boolean;
 
-#include "drivers/vulkan/rendering_context_driver_vulkan.h"
+export declare function setMainWindowId(windowId: number): boolean;
+export declare function is_started(): boolean;
+export declare function iteration(): boolean;
+export declare function stop(): void;
 
-class RenderingContextDriverVulkanOpenHarmony : public RenderingContextDriverVulkan {
-	virtual const char *_get_platform_surface_extension() const override final;
+export declare function focus_out(): void;
+export declare function focus_in(): void;
+export declare function pause(): void;
+export declare function resume(): void;
 
-protected:
-	SurfaceID surface_create(const void *p_platform_data) override final;
-	bool _use_validation_layers() const override final;
-
-public:
-	struct WindowPlatformData {
-		OHNativeWindow *window = nullptr;
-	};
-
-	RenderingContextDriverVulkanOpenHarmony() = default;
-	~RenderingContextDriverVulkanOpenHarmony() override = default;
-};
-
-#endif // VULKAN_ENABLED
+export declare function createNativeNode(windowId: number, content: NodeContent): void;

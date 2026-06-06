@@ -30,20 +30,298 @@
 
 #include "display_server_openharmony.h"
 
+#include "input_manager_openharmony.h"
+#include "key_mapping_openharmony.h"
 #include "os_openharmony.h"
 #include "rendering_context_driver_vulkan_openharmony.h"
+#include "screen_manager_openharmony.h"
 #include "wrapper_openharmony.h"
 
 #include "core/input/input.h"
+#include "main/main.h"
+#include "servers/display/native_menu.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
-#include "servers/rendering/rendering_device.h"
 
-#include <database/pasteboard/oh_pasteboard.h>
-#include <database/udmf/udmf.h>
-#include <database/udmf/uds.h>
+#include <ace/xcomponent/native_interface_xcomponent.h>
+#include <arkui/native_key_event.h>
+#include <arkui/native_node.h>
 
 void DisplayServerOpenHarmony::_dispatch_input_events(const Ref<InputEvent> &p_event) {
 	get_singleton()->send_input_event(p_event);
+}
+
+void DisplayServerOpenHarmony::_parse_modifiers_from(const ArkUI_UIInputEvent *p_source_event, const Ref<InputEventWithModifiers> &p_event) {
+	uint64_t modifier_keys = 0;
+	OH_ArkUI_UIInputEvent_GetModifierKeyStates(p_source_event, &modifier_keys);
+
+	p_event->set_ctrl_pressed(modifier_keys & ARKUI_MODIFIER_KEY_CTRL);
+	p_event->set_shift_pressed(modifier_keys & ARKUI_MODIFIER_KEY_SHIFT);
+	p_event->set_alt_pressed(modifier_keys & ARKUI_MODIFIER_KEY_ALT);
+
+	int32_t pressed_keys[10] = {};
+	int32_t length = 10;
+	OH_ArkUI_UIInputEvent_GetPressedKeys(p_source_event, pressed_keys, &length);
+	length = MIN(10, length);
+	for (int i = 0; i < length; i++) {
+		if (KeyMappingOpenHarmony::map_key(pressed_keys[i]) == Key::META) {
+			p_event->set_meta_pressed(true);
+			return;
+		}
+	}
+}
+
+MouseButton DisplayServerOpenHarmony::_map_mouse_button(int32_t p_button) {
+	switch (p_button) {
+		case UI_MOUSE_EVENT_BUTTON_LEFT:
+			return MouseButton::LEFT;
+		case UI_MOUSE_EVENT_BUTTON_RIGHT:
+			return MouseButton::RIGHT;
+		case UI_MOUSE_EVENT_BUTTON_MIDDLE:
+			return MouseButton::MIDDLE;
+		case UI_MOUSE_EVENT_BUTTON_BACK:
+			return MouseButton::MB_XBUTTON1;
+		case UI_MOUSE_EVENT_BUTTON_FORWARD:
+			return MouseButton::MB_XBUTTON2;
+		default:
+			return MouseButton::NONE;
+	}
+}
+
+void DisplayServerOpenHarmony::_parse_mouse_event_from(ArkUI_UIInputEvent *p_source_event, const Ref<InputEventMouse> &p_event) {
+	// Button masks.
+	int32_t pressed_buttons[10] = {};
+	int32_t length = 10;
+	OH_ArkUI_MouseEvent_GetPressedButtons(p_source_event, pressed_buttons, &length);
+	length = MIN(10, length);
+	for (int i = 0; i < length; i++) {
+		MouseButton button_idx = _map_mouse_button(pressed_buttons[i]);
+		p_event->set_button_mask(mouse_button_to_mask(button_idx));
+	}
+
+	// Position.
+	Point2 pos;
+	pos.x = OH_ArkUI_PointerEvent_GetX(p_source_event);
+	pos.y = OH_ArkUI_PointerEvent_GetY(p_source_event);
+	pos = ScreenManagerOpenharmony::get_singleton()->vp_to_px(pos, _get_screen_index(DisplayServerEnums::SCREEN_OF_MAIN_WINDOW));
+	p_event->set_position(pos);
+	p_event->set_global_position(pos);
+
+	// Device and window.
+	const int32_t device_id = OH_ArkUI_UIInputEvent_GetDeviceId(p_source_event);
+	p_event->set_device(device_id);
+	p_event->set_window_id(0);
+
+	// Modifiers.
+	_parse_modifiers_from(p_source_event, p_event);
+}
+
+void DisplayServerOpenHarmony::_parse_touch_event(ArkUI_UIInputEvent *p_event) {
+	Ref<InputEventScreenTouch> ste;
+	ste.instantiate();
+
+	const int32_t device_id = OH_ArkUI_UIInputEvent_GetDeviceId(p_event);
+	ste->set_device(device_id);
+	// ste->set_window_id(0);
+
+	uint32_t id = 0;
+	OH_ArkUI_PointerEvent_GetChangedPointerId(p_event, &id);
+	ste->set_index(id);
+
+	const int32_t action = OH_ArkUI_UIInputEvent_GetAction(p_event);
+	const bool pressed = action == UI_TOUCH_EVENT_ACTION_DOWN;
+	const bool canceled = action == UI_TOUCH_EVENT_ACTION_CANCEL;
+	ste->set_pressed(pressed);
+	ste->set_canceled(canceled);
+
+	Point2 pos;
+	pos.x = OH_ArkUI_PointerEvent_GetX(p_event);
+	pos.y = OH_ArkUI_PointerEvent_GetY(p_event);
+	// ERR_PRINT(vformat("type:%d, action:%d, position:%v.", event_type, action, pos));
+
+	pos = ScreenManagerOpenharmony::get_singleton()->vp_to_px(pos, _get_screen_index(DisplayServerEnums::SCREEN_OF_MAIN_WINDOW));
+	ste->set_position(pos);
+
+	if (pressed) {
+		const uint32_t pointer_count = OH_ArkUI_PointerEvent_GetPointerCount(p_event);
+		if (pointer_count == 1) {
+			const int64_t time = OH_ArkUI_UIInputEvent_GetEventTime(p_event) / 1000000LL;
+			const int64_t diff = time - last_click_ms;
+
+			if (diff < 400 && last_click_pos.distance_to(pos) < 5) {
+				last_click_ms = 0;
+				last_click_pos = Point2i(-100, -100);
+				ste->set_double_tap(true);
+			} else {
+				last_click_ms = time;
+				last_click_pos = pos;
+			}
+		}
+	}
+	// ERR_PRINT(vformat("type:%d, action:%d, position:%v.", event_type, action, pos));
+
+	Input::get_singleton()->parse_input_event(ste);
+}
+
+void DisplayServerOpenHarmony::_parse_axis_event(ArkUI_UIInputEvent *p_event) {
+	const int32_t source_type = OH_ArkUI_UIInputEvent_GetSourceType(p_event);
+	if (source_type == UI_INPUT_EVENT_SOURCE_TYPE_MOUSE) {
+		const float angle = OH_ArkUI_AxisEvent_GetVerticalAxisValue(p_event);
+		if (Math::is_zero_approx(angle)) {
+			return;
+		}
+
+		Ref<InputEventMouseButton> mb;
+		mb.instantiate();
+
+		if (angle > 0) {
+			mb->set_button_index(MouseButton::WHEEL_UP);
+		} else {
+			mb->set_button_index(MouseButton::WHEEL_DOWN);
+		}
+
+		_parse_mouse_event_from(p_event, mb);
+
+		Input::get_singleton()->parse_input_event(mb);
+	}
+}
+
+void DisplayServerOpenHarmony::_parse_mouse_event(ArkUI_UIInputEvent *p_event) {
+	const int32_t button = OH_ArkUI_MouseEvent_GetMouseButton(p_event);
+	if (button == UI_MOUSE_EVENT_BUTTON_LEFT) {
+		return; // The left mouse button event will also be converted into a touch event.
+	}
+	const int32_t mouse_action = OH_ArkUI_MouseEvent_GetMouseAction(p_event);
+	if (mouse_action == UI_MOUSE_EVENT_ACTION_UNKNOWN) {
+		return;
+	}
+
+	Ref<InputEventMouse> me;
+	MouseButton button_index = _map_mouse_button(button);
+
+	if (mouse_action == UI_MOUSE_EVENT_ACTION_MOVE) {
+		Ref<InputEventMouseMotion> mm;
+		mm.instantiate();
+		me = mm;
+	} else {
+		ERR_FAIL_COND(button_index == MouseButton::NONE);
+
+		Ref<InputEventMouseButton> mb;
+		mb.instantiate();
+		me = mb;
+
+		mb->set_button_index(button_index);
+		mb->set_pressed(mouse_action == UI_MOUSE_EVENT_ACTION_PRESS);
+		mb->set_canceled(mouse_action == UI_MOUSE_EVENT_ACTION_CANCEL);
+	}
+
+	BitField<MouseButtonMask> button_mask = MouseButtonMask::NONE;
+	if (button_index != MouseButton::NONE) {
+		button_mask = mouse_button_to_mask(button_index);
+	}
+	me->set_button_mask(button_mask);
+	_parse_mouse_event_from(p_event, me); // Additional mask.
+
+	Input::get_singleton()->parse_input_event(me);
+}
+
+void DisplayServerOpenHarmony::_parse_key_event(ArkUI_UIInputEvent *p_event) {
+	const ArkUI_KeySourceType source_type = OH_ArkUI_KeyEvent_GetKeySource(p_event);
+	if (source_type == ARKUI_KEY_SOURCE_TYPE_KEYBOARD) {
+		const ArkUI_KeyEventType key_type = OH_ArkUI_KeyEvent_GetType(p_event);
+		if (key_type != ARKUI_KEY_EVENT_DOWN && key_type != ARKUI_KEY_EVENT_UP && key_type != ARKUI_KEY_EVENT_LONG_PRESS) {
+			return;
+		}
+
+		Ref<InputEventKey> ke;
+		ke.instantiate();
+
+		ke->set_pressed(key_type != ARKUI_KEY_EVENT_UP);
+		ke->set_echo(key_type == ARKUI_KEY_EVENT_LONG_PRESS);
+
+		const int32_t keysym = OH_ArkUI_KeyEvent_GetKeyCode(p_event);
+		ke->set_keycode(KeyMappingOpenHarmony::map_key(keysym));
+		ke->set_location(KeyMappingOpenHarmony::get_location(keysym));
+
+		const uint32_t unicode = OH_ArkUI_KeyEvent_GetUnicode(p_event);
+		ke->set_unicode(unicode);
+		const int32_t device_id = OH_ArkUI_UIInputEvent_GetDeviceId(p_event);
+		ke->set_device(device_id);
+		// ke->set_window_id(0);
+
+		_parse_modifiers_from(p_event, ke);
+
+		Input::get_singleton()->parse_input_event(ke);
+	}
+}
+
+void DisplayServerOpenHarmony::_input(ArkUI_NodeEvent *p_event) {
+	if (!get_singleton()) {
+		return;
+	}
+	ArkUI_UIInputEvent *source_event = OH_ArkUI_NodeEvent_GetInputEvent(p_event);
+	if (!source_event) {
+		return;
+	}
+	const int32_t type = OH_ArkUI_UIInputEvent_GetType(source_event);
+	if (type == ARKUI_UIINPUTEVENT_TYPE_UNKNOWN) {
+		return;
+	}
+	const ArkUI_NodeEventType event_type = OH_ArkUI_NodeEvent_GetEventType(p_event);
+	// const int32_t native_window_id = OH_ArkUI_NodeEvent_GetTargetId(p_event);
+	if (event_type == NODE_TOUCH_EVENT && type == ARKUI_UIINPUTEVENT_TYPE_TOUCH) {
+		get_singleton()->_parse_touch_event(source_event);
+	} else if (event_type == NODE_ON_AXIS && type == ARKUI_UIINPUTEVENT_TYPE_AXIS) {
+		get_singleton()->_parse_axis_event(source_event);
+	} else if (event_type == NODE_ON_MOUSE && type == ARKUI_UIINPUTEVENT_TYPE_MOUSE) {
+		get_singleton()->_parse_mouse_event(source_event);
+	} else if (event_type == NODE_ON_KEY_EVENT && type == ARKUI_UIINPUTEVENT_TYPE_KEY) {
+		get_singleton()->_parse_key_event(source_event);
+	}
+}
+
+DisplayServerOpenHarmony::NodeData::~NodeData() {
+	OH_ArkUI_XComponent_UnregisterOnFrameCallback(node);
+	if (parent) {
+		OH_ArkUI_NodeContent_RemoveNode(parent, node);
+	}
+
+	if (holder) {
+		if (callback) {
+			OH_ArkUI_SurfaceHolder_RemoveSurfaceCallback(holder, callback);
+			OH_ArkUI_SurfaceCallback_Dispose(callback);
+		}
+
+		OH_ArkUI_SurfaceHolder_Dispose(holder);
+	}
+}
+
+void DisplayServerOpenHarmony::_surface_created_native(OH_ArkUI_SurfaceHolder *p_holder) {
+}
+
+void DisplayServerOpenHarmony::_surface_changed_native(OH_ArkUI_SurfaceHolder *p_holder, uint64_t p_width, uint64_t p_height) {
+	ERR_PRINT(vformat("_surface_changed_native, =========== width: %d, height: %d.", p_width, p_height));
+	get_singleton()->resize_window(p_width, p_height);
+}
+
+void DisplayServerOpenHarmony::_surface_destroyed_native(OH_ArkUI_SurfaceHolder *p_holder) {
+}
+
+void DisplayServerOpenHarmony::_surface_show_native(OH_ArkUI_SurfaceHolder *p_holder) {
+	if (OS::get_singleton()->get_main_loop()) {
+		OS::get_singleton()->get_main_loop()->notification(MainLoop::NOTIFICATION_APPLICATION_FOCUS_IN);
+	}
+}
+
+void DisplayServerOpenHarmony::_surface_hide_native(OH_ArkUI_SurfaceHolder *p_holder) {
+	if (OS::get_singleton()->get_main_loop()) {
+		OS::get_singleton()->get_main_loop()->notification(MainLoop::NOTIFICATION_APPLICATION_FOCUS_OUT);
+	}
+}
+
+void DisplayServerOpenHarmony::_frame_callback_native(ArkUI_NodeHandle p_node, uint64_t p_timestamp, uint64_t p_target_timestamp) {
+	ERR_FAIL_COND(!get_singleton()->node_datas.has(p_node));
+	DisplayServer::get_singleton()->process_events();
+	Main::iteration();
 }
 
 DisplayServerOpenHarmony *DisplayServerOpenHarmony::get_singleton() {
@@ -71,53 +349,56 @@ void DisplayServerOpenHarmony::register_openharmony_driver() {
 }
 
 DisplayServerOpenHarmony::DisplayServerOpenHarmony(const String &p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window, Error &r_error) {
+	r_error = ERR_INVALID_PARAMETER;
 	rendering_driver = p_rendering_driver;
+	ERR_FAIL_COND_MSG(rendering_driver != "vulkan", vformat("Failed to create %s context.", rendering_driver));
 
-	rendering_context = nullptr;
-	rendering_device = nullptr;
+	r_error = ERR_UNAVAILABLE;
+	KeyMappingOpenHarmony::initialize();
 
-	if (rendering_driver != "vulkan") {
-		ERR_PRINT(vformat("Failed to create %s context.", rendering_driver));
-		r_error = ERR_UNAVAILABLE;
-	}
+	native_menu = memnew(NativeMenu);
 
+	screen_manager = memnew(ScreenManagerOpenharmony);
+	input_manager = memnew(InputManagerOpenHarmony);
+
+#ifdef VULKAN_ENABLED
 	rendering_context = memnew(RenderingContextDriverVulkanOpenHarmony);
-
 	if (rendering_context->initialize() != OK) {
+		ERR_PRINT(vformat("Failed to initialize %s context.", rendering_driver));
 		memdelete(rendering_context);
 		rendering_context = nullptr;
-		ERR_PRINT(vformat("Failed to initialize %s context.", rendering_driver));
-		r_error = ERR_UNAVAILABLE;
 		return;
 	}
+
 	RenderingContextDriverVulkanOpenHarmony::WindowPlatformData vulkan;
 	OHNativeWindow *native_window = OS_OpenHarmony::get_singleton()->get_native_window();
-	ERR_FAIL_NULL(native_window);
 	vulkan.window = native_window;
 
-	if (rendering_context->window_create(DisplayServerEnums::MAIN_WINDOW_ID, &vulkan) != OK) {
+	if (!native_window || rendering_context->window_create(DisplayServerEnums::MAIN_WINDOW_ID, &vulkan) != OK) {
 		ERR_PRINT(vformat("Failed to create %s window.", rendering_driver));
 		memdelete(rendering_context);
 		rendering_context = nullptr;
-		r_error = ERR_UNAVAILABLE;
 		return;
 	}
 
-	Size2i display_size = OS_OpenHarmony::get_singleton()->get_display_size();
+	Size2i display_size = screen_get_size();
+	ERR_PRINT(vformat("display size: %d, %d.", display_size.x, display_size.y));
 	rendering_context->window_set_size(DisplayServerEnums::MAIN_WINDOW_ID, display_size.width, display_size.height);
 	rendering_context->window_set_vsync_mode(DisplayServerEnums::MAIN_WINDOW_ID, p_vsync_mode);
 
 	rendering_device = memnew(RenderingDevice);
-	if (rendering_device->initialize(rendering_context, DisplayServerEnums::MAIN_WINDOW_ID) != OK) {
+	Error err = rendering_device->initialize(rendering_context, DisplayServerEnums::MAIN_WINDOW_ID);
+	if (err != OK) {
+		ERR_PRINT(vformat("Failed to initialize rendering device. error: %d.", err));
+		memdelete(rendering_device);
 		rendering_device = nullptr;
-		memdelete(rendering_context);
-		rendering_context = nullptr;
-		r_error = ERR_UNAVAILABLE;
 		return;
 	}
+
 	rendering_device->screen_create(DisplayServerEnums::MAIN_WINDOW_ID);
 
 	RendererCompositorRD::make_current();
+#endif // VULKAN_ENABLED
 
 	Input::get_singleton()->set_event_dispatch_function(_dispatch_input_events);
 
@@ -125,6 +406,34 @@ DisplayServerOpenHarmony::DisplayServerOpenHarmony(const String &p_rendering_dri
 }
 
 DisplayServerOpenHarmony::~DisplayServerOpenHarmony() {
+	if (native_menu) {
+		memdelete(native_menu);
+		native_menu = nullptr;
+	}
+
+	virtual_keyboard_hide(); // Ensure IME resources are cleaned up.
+
+	if (rendering_device) {
+		rendering_device->screen_free(DisplayServerEnums::MAIN_WINDOW_ID);
+		memdelete(rendering_device);
+		rendering_device = nullptr;
+	}
+
+	if (rendering_context) {
+		rendering_context->window_destroy(DisplayServerEnums::MAIN_WINDOW_ID);
+		memdelete(rendering_context);
+		rendering_context = nullptr;
+	}
+
+	if (input_manager) {
+		memdelete(input_manager);
+		input_manager = nullptr;
+	}
+
+	if (screen_manager) {
+		memdelete(screen_manager);
+		screen_manager = nullptr;
+	}
 }
 
 void DisplayServerOpenHarmony::_window_callback(const Callable &p_callable, const Variant &p_arg, bool p_deferred) const {
@@ -148,7 +457,7 @@ void DisplayServerOpenHarmony::resize_window(uint32_t p_width, uint32_t p_height
 	if (rendering_context) {
 		rendering_context->window_set_size(DisplayServerEnums::MAIN_WINDOW_ID, size.x, size.y);
 	}
-#endif
+#endif // RD_ENABLED
 
 	Variant resize_rect = Rect2i(Point2i(), size);
 	_window_callback(window_resize_callback, resize_rect);
@@ -175,333 +484,189 @@ String DisplayServerOpenHarmony::get_name() const {
 	return "OpenHarmony";
 }
 
+TypedArray<Rect2> DisplayServerOpenHarmony::get_display_cutouts(int p_screen) const {
+	return screen_manager->get_display_cutouts(p_screen);
+}
+
 int DisplayServerOpenHarmony::get_screen_count() const {
-	return 1;
+	return screen_manager->get_screen_count();
 }
 
 int DisplayServerOpenHarmony::get_primary_screen() const {
-	return 0;
+	return screen_manager->get_primary_screen();
+}
+
+int DisplayServerOpenHarmony::get_screen_from_rect(const Rect2 &p_rect) const {
+	return screen_manager->get_screen_from_rect(p_rect);
 }
 
 Point2i DisplayServerOpenHarmony::screen_get_position(int p_screen) const {
-	return Point2i(0, 0);
+	p_screen = _get_screen_index(p_screen);
+	return screen_manager->screen_get_position(p_screen);
 }
 
 Size2i DisplayServerOpenHarmony::screen_get_size(int p_screen) const {
-	return OS_OpenHarmony::get_singleton()->get_display_size();
+	p_screen = _get_screen_index(p_screen);
+	return screen_manager->screen_get_size(p_screen);
 }
 
 Rect2i DisplayServerOpenHarmony::screen_get_usable_rect(int p_screen) const {
-	Size2i display_size = OS_OpenHarmony::get_singleton()->get_display_size();
-	return Rect2i(0, 0, display_size.width, display_size.height);
+	p_screen = _get_screen_index(p_screen);
+	return screen_manager->screen_get_usable_rect(p_screen);
 }
 
 int DisplayServerOpenHarmony::screen_get_dpi(int p_screen) const {
-	return ohos_wrapper_get_display_dpi();
+	p_screen = _get_screen_index(p_screen);
+	return screen_manager->screen_get_dpi(p_screen);
 }
 
 float DisplayServerOpenHarmony::screen_get_scale(int p_screen) const {
-	return ohos_wrapper_get_display_scaled_density();
+	p_screen = _get_screen_index(p_screen);
+	return screen_manager->screen_get_scale(p_screen);
 }
 
 float DisplayServerOpenHarmony::screen_get_refresh_rate(int p_screen) const {
-	return ohos_wrapper_get_display_refresh_rate();
+	p_screen = _get_screen_index(p_screen);
+	return screen_manager->screen_get_refresh_rate(p_screen);
+}
+
+Color DisplayServerOpenHarmony::screen_get_pixel(const Point2i &p_position) const {
+	return screen_manager->screen_get_pixel(p_position);
+}
+
+Ref<Image> DisplayServerOpenHarmony::screen_get_image(int p_screen) const {
+	p_screen = _get_screen_index(p_screen);
+	return screen_manager->screen_get_image(p_screen);
+}
+
+Ref<Image> DisplayServerOpenHarmony::screen_get_image_rect(const Rect2i &p_rect) const {
+	return screen_manager->screen_get_image_rect(p_rect);
 }
 
 bool DisplayServerOpenHarmony::is_touchscreen_available() const {
-	return true;
+	return screen_manager->is_touchscreen_available();
 }
 
 void DisplayServerOpenHarmony::screen_set_orientation(DisplayServerEnums::ScreenOrientation p_orientation, int p_screen) {
-	// Not supported on OpenHarmony.
+	p_screen = _get_screen_index(p_screen);
+	screen_manager->screen_set_orientation(p_orientation, p_screen);
 }
 
 DisplayServerEnums::ScreenOrientation DisplayServerOpenHarmony::screen_get_orientation(int p_screen) const {
-	switch (ohos_wrapper_get_display_orientation()) {
-		case WrapperScreenOrientation::WRAPPER_SCREEN_LANDSCAPE:
-			return DisplayServerEnums::SCREEN_LANDSCAPE;
-		case WrapperScreenOrientation::WRAPPER_SCREEN_PORTRAIT:
-			return DisplayServerEnums::SCREEN_PORTRAIT;
-		case WrapperScreenOrientation::WRAPPER_SCREEN_REVERSE_LANDSCAPE:
-			return DisplayServerEnums::SCREEN_REVERSE_LANDSCAPE;
-		case WrapperScreenOrientation::WRAPPER_SCREEN_REVERSE_PORTRAIT:
-			return DisplayServerEnums::SCREEN_REVERSE_PORTRAIT;
-		default:
-			return DisplayServerEnums::SCREEN_PORTRAIT;
-	}
-}
-
-void DisplayServerOpenHarmony::clipboard_set(const String &p_text) {
-	OH_Pasteboard *pasteboard = OH_Pasteboard_Create();
-	OH_UdsPlainText *plainText = OH_UdsPlainText_Create();
-	OH_UdsPlainText_SetContent(plainText, p_text.utf8().get_data());
-	OH_UdmfRecord *record = OH_UdmfRecord_Create();
-	OH_UdmfRecord_AddPlainText(record, plainText);
-	OH_UdmfData *data = OH_UdmfData_Create();
-	OH_UdmfData_AddRecord(data, record);
-	int status = OH_Pasteboard_SetData(pasteboard, data);
-	if (status != 0) {
-		ERR_PRINT("Failed to set clipboard data with PASTEBOARD_ErrCode: " + itos(status));
-	}
-	OH_UdsPlainText_Destroy(plainText);
-	OH_UdmfRecord_Destroy(record);
-	OH_UdmfData_Destroy(data);
-	OH_Pasteboard_Destroy(pasteboard);
-}
-
-String DisplayServerOpenHarmony::clipboard_get() const {
-	String content;
-	OH_Pasteboard *pasteboard = OH_Pasteboard_Create();
-	bool hasPlainTextData = OH_Pasteboard_HasType(pasteboard, "text/plain");
-	if (hasPlainTextData) {
-		int status = 0;
-		OH_UdmfData *udmfData = OH_Pasteboard_GetData(pasteboard, &status);
-		if (status == 0) {
-			OH_UdmfRecord *record = OH_UdmfData_GetRecord(udmfData, 0);
-			OH_UdsPlainText *plainText = OH_UdsPlainText_Create();
-			OH_UdmfRecord_GetPlainText(record, plainText);
-			content = String::utf8(OH_UdsPlainText_GetContent(plainText));
-			OH_UdsPlainText_Destroy(plainText);
-		} else {
-			ERR_PRINT("Failed to get clipboard data with PASTEBOARD_ErrCode: " + itos(status));
-		}
-		OH_UdmfData_Destroy(udmfData);
-	}
-	OH_Pasteboard_Destroy(pasteboard);
-	return content;
+	p_screen = _get_screen_index(p_screen);
+	return screen_manager->screen_get_orientation(p_screen);
 }
 
 void DisplayServerOpenHarmony::screen_set_keep_on(bool p_enable) {
-	ohos_wrapper_screen_set_keep_on(OS_OpenHarmony::get_singleton()->get_window_id(), p_enable);
+	ohos_wrapper_screen_set_keep_on(OS_OpenHarmony::get_singleton()->get_native_main_window_id(), p_enable);
 }
 
 bool DisplayServerOpenHarmony::screen_is_kept_on() const {
-	return ohos_wrapper_screen_is_kept_on(OS_OpenHarmony::get_singleton()->get_window_id());
+	return ohos_wrapper_screen_is_kept_on(OS_OpenHarmony::get_singleton()->get_native_main_window_id());
 }
 
-void DisplayServerOpenHarmony::_get_text_config(InputMethod_TextEditorProxy *p_text_editor_proxy, InputMethod_TextConfig *p_text_config) {
-	InputMethod_TextInputType input_type = IME_TEXT_INPUT_TYPE_TEXT;
-	InputMethod_EnterKeyType enter_key_type = IME_ENTER_KEY_DONE;
-	switch (get_singleton()->keyboard_type) {
-		case DisplayServerEnums::KEYBOARD_TYPE_DEFAULT:
-			input_type = IME_TEXT_INPUT_TYPE_TEXT;
-			break;
-		case DisplayServerEnums::KEYBOARD_TYPE_MULTILINE:
-			input_type = IME_TEXT_INPUT_TYPE_MULTILINE;
-			enter_key_type = IME_ENTER_KEY_NEWLINE;
-			break;
-		case DisplayServerEnums::KEYBOARD_TYPE_NUMBER:
-			input_type = IME_TEXT_INPUT_TYPE_NUMBER;
-			break;
-		case DisplayServerEnums::KEYBOARD_TYPE_NUMBER_DECIMAL:
-			input_type = IME_TEXT_INPUT_TYPE_NUMBER_DECIMAL;
-			break;
-		case DisplayServerEnums::KEYBOARD_TYPE_PHONE:
-			input_type = IME_TEXT_INPUT_TYPE_PHONE;
-			break;
-		case DisplayServerEnums::KEYBOARD_TYPE_EMAIL_ADDRESS:
-			input_type = IME_TEXT_INPUT_TYPE_EMAIL_ADDRESS;
-			break;
-		case DisplayServerEnums::KEYBOARD_TYPE_PASSWORD:
-			input_type = IME_TEXT_INPUT_TYPE_VISIBLE_PASSWORD;
-			break;
-		case DisplayServerEnums::KEYBOARD_TYPE_URL:
-			input_type = IME_TEXT_INPUT_TYPE_URL;
-			break;
-		default:
-			break;
+void DisplayServerOpenHarmony::mouse_set_mode(DisplayServerEnums::MouseMode p_mode) {
+	input_manager->mouse_set_mode(p_mode);
+}
+
+DisplayServerEnums::MouseMode DisplayServerOpenHarmony::mouse_get_mode() const {
+	return input_manager->mouse_get_mode();
+}
+
+void DisplayServerOpenHarmony::mouse_set_mode_override(DisplayServerEnums::MouseMode p_mode) {
+	input_manager->mouse_set_mode_override(p_mode);
+}
+
+DisplayServerEnums::MouseMode DisplayServerOpenHarmony::mouse_get_mode_override() const {
+	return input_manager->mouse_get_mode_override();
+}
+
+void DisplayServerOpenHarmony::mouse_set_mode_override_enabled(bool p_override_enabled) {
+	input_manager->mouse_set_mode_override_enabled(p_override_enabled);
+}
+
+bool DisplayServerOpenHarmony::mouse_is_mode_override_enabled() const {
+	return input_manager->mouse_is_mode_override_enabled();
+}
+
+void DisplayServerOpenHarmony::warp_mouse(const Point2i &p_position) {
+	input_manager->warp_mouse(p_position);
+}
+
+Point2i DisplayServerOpenHarmony::mouse_get_position() const {
+	return input_manager->mouse_get_position();
+}
+
+BitField<MouseButtonMask> DisplayServerOpenHarmony::mouse_get_button_state() const {
+	return input_manager->mouse_get_button_state();
+}
+
+void DisplayServerOpenHarmony::cursor_set_shape(DisplayServerEnums::CursorShape p_shape) {
+	input_manager->cursor_set_shape(p_shape);
+}
+
+DisplayServerEnums::CursorShape DisplayServerOpenHarmony::cursor_get_shape() const {
+	return input_manager->cursor_get_shape();
+}
+
+void DisplayServerOpenHarmony::cursor_set_custom_image(const Ref<Resource> &p_cursor, DisplayServerEnums::CursorShape p_shape, const Vector2 &p_hotspot) {
+	if (p_cursor.is_null()) {
+		input_manager->cursor_set_custom_image(p_cursor, p_shape, p_hotspot);
+		return;
 	}
-	OH_TextConfig_SetInputType(p_text_config, input_type);
-	OH_TextConfig_SetPreviewTextSupport(p_text_config, false);
-	OH_TextConfig_SetEnterKeyType(p_text_config, enter_key_type);
+
+	Ref<Image> image = _get_cursor_image_from_resource(p_cursor, p_hotspot);
+	ERR_FAIL_COND(image.is_null());
+
+	input_manager->cursor_set_custom_image(p_cursor, p_shape, p_hotspot);
 }
 
-void DisplayServerOpenHarmony::_insert_text(InputMethod_TextEditorProxy *p_text_editor_proxy, const char16_t *p_text, size_t length) {
-	String characters = String::utf16(p_text, length);
-
-	for (int i = 0; i < characters.size(); i++) {
-		int character = characters[i];
-		Key key = Key::NONE;
-
-		if (character == '\t') { // 0x09
-			key = Key::TAB;
-		} else if (character == '\n') { // 0x0A
-			key = Key::ENTER;
-		} else if (character == 0x2006) {
-			key = Key::SPACE;
-		}
-
-		_input_text_key(key, character, key, Key::NONE, 0, true, KeyLocation::UNSPECIFIED);
-		_input_text_key(key, character, key, Key::NONE, 0, false, KeyLocation::UNSPECIFIED);
-	}
+Point2i DisplayServerOpenHarmony::ime_get_selection() const {
+	return input_manager->ime_get_selection();
 }
 
-void DisplayServerOpenHarmony::_delete_forward(InputMethod_TextEditorProxy *p_text_editor_proxy, int32_t length) {
-	for (int i = 0; i < length; i++) {
-		_input_text_key(Key::KEY_DELETE, 0, Key::KEY_DELETE, Key::NONE, 0, true, KeyLocation::UNSPECIFIED);
-		_input_text_key(Key::KEY_DELETE, 0, Key::KEY_DELETE, Key::NONE, 0, false, KeyLocation::UNSPECIFIED);
-	}
-}
-
-void DisplayServerOpenHarmony::_delete_backward(InputMethod_TextEditorProxy *p_text_editor_proxy, int32_t length) {
-	for (int i = 0; i < length; i++) {
-		_input_text_key(Key::BACKSPACE, 0, Key::BACKSPACE, Key::NONE, 0, true, KeyLocation::UNSPECIFIED);
-		_input_text_key(Key::BACKSPACE, 0, Key::BACKSPACE, Key::NONE, 0, false, KeyLocation::UNSPECIFIED);
-	}
-}
-
-void DisplayServerOpenHarmony::_send_keyboard_status(InputMethod_TextEditorProxy *p_text_editor_proxy, InputMethod_KeyboardStatus status) {
-	get_singleton()->keyboard_status = status;
-}
-
-void DisplayServerOpenHarmony::_send_enter_key(InputMethod_TextEditorProxy *p_text_editor_proxy, InputMethod_EnterKeyType enter_key_type) {
-	_input_text_key(Key::ENTER, 0, Key::ENTER, Key::NONE, 0, true, KeyLocation::UNSPECIFIED);
-	_input_text_key(Key::ENTER, 0, Key::ENTER, Key::NONE, 0, false, KeyLocation::UNSPECIFIED);
-}
-
-void DisplayServerOpenHarmony::_move_cursor(InputMethod_TextEditorProxy *p_text_editor_proxy, InputMethod_Direction direction) {
-	switch (direction) {
-		case IME_DIRECTION_LEFT:
-			_input_text_key(Key::LEFT, 0, Key::LEFT, Key::NONE, 0, true, KeyLocation::UNSPECIFIED);
-			_input_text_key(Key::LEFT, 0, Key::LEFT, Key::NONE, 0, false, KeyLocation::UNSPECIFIED);
-			break;
-		case IME_DIRECTION_RIGHT:
-			_input_text_key(Key::RIGHT, 0, Key::RIGHT, Key::NONE, 0, true, KeyLocation::UNSPECIFIED);
-			_input_text_key(Key::RIGHT, 0, Key::RIGHT, Key::NONE, 0, false, KeyLocation::UNSPECIFIED);
-			break;
-		case IME_DIRECTION_UP:
-			_input_text_key(Key::UP, 0, Key::UP, Key::NONE, 0, true, KeyLocation::UNSPECIFIED);
-			_input_text_key(Key::UP, 0, Key::UP, Key::NONE, 0, false, KeyLocation::UNSPECIFIED);
-			break;
-		case IME_DIRECTION_DOWN:
-			_input_text_key(Key::DOWN, 0, Key::DOWN, Key::NONE, 0, true, KeyLocation::UNSPECIFIED);
-			_input_text_key(Key::DOWN, 0, Key::DOWN, Key::NONE, 0, false, KeyLocation::UNSPECIFIED);
-			break;
-		default:
-			break;
-	}
-}
-
-void DisplayServerOpenHarmony::_handle_set_selection(InputMethod_TextEditorProxy *p_text_editor_proxy, int32_t start, int32_t end) {
-	// Not supported by Godot.
-}
-
-void DisplayServerOpenHarmony::_handle_extend_action(InputMethod_TextEditorProxy *p_text_editor_proxy, InputMethod_ExtendAction action) {
-	// Not supported by Godot.
-}
-
-void DisplayServerOpenHarmony::_get_left_text_of_cursor(InputMethod_TextEditorProxy *p_text_editor_proxy, int32_t number, char16_t *p_text, size_t *p_length) {
-	// Not supported by Godot.
-}
-
-void DisplayServerOpenHarmony::_get_right_text_of_cursor(InputMethod_TextEditorProxy *p_text_editor_proxy, int32_t number, char16_t *p_text, size_t *p_length) {
-	// Not supported by Godot.
-}
-
-int32_t DisplayServerOpenHarmony::_get_text_index_at_cursor(InputMethod_TextEditorProxy *p_text_editor_proxy) {
-	// Not supported by Godot.
-	return 0;
-}
-
-int32_t DisplayServerOpenHarmony::_receive_private_command(InputMethod_TextEditorProxy *p_text_editor_proxy, InputMethod_PrivateCommand *p_command[], size_t length) {
-	// Not supported by Godot.
-	return 0;
-}
-
-int32_t DisplayServerOpenHarmony::_set_preview_text(InputMethod_TextEditorProxy *p_text_editor_proxy, const char16_t *p_text, size_t length, int32_t start, int32_t end) {
-	// Not supported by Godot.
-	return 0;
-}
-
-void DisplayServerOpenHarmony::_finish_text_preview(InputMethod_TextEditorProxy *p_text_editor_proxy) {
-	// Not supported by Godot.
-}
-
-void DisplayServerOpenHarmony::_input_text_key(Key p_key, char32_t p_char, Key p_unshifted, Key p_physical, int p_modifier, bool p_pressed, KeyLocation p_location) {
-	Ref<InputEventKey> ev;
-	ev.instantiate();
-	ev->set_echo(false);
-	ev->set_pressed(p_pressed);
-	ev->set_keycode(fix_keycode(p_char, p_key));
-	ev->set_key_label(p_unshifted);
-	ev->set_physical_keycode(p_physical);
-	ev->set_unicode(fix_unicode(p_char));
-	ev->set_location(p_location);
-	Input::get_singleton()->parse_input_event(ev);
+String DisplayServerOpenHarmony::ime_get_text() const {
+	return input_manager->ime_get_text();
 }
 
 void DisplayServerOpenHarmony::virtual_keyboard_show(const String &p_existing_text, const Rect2 &p_screen_rect, DisplayServerEnums::VirtualKeyboardType p_type, int p_max_length, int p_cursor_start, int p_cursor_end) {
-	if (keyboard_status == IME_KEYBOARD_STATUS_SHOW && keyboard_type == p_type) {
-		return;
-	}
-	if (keyboard_status != IME_KEYBOARD_STATUS_NONE) {
-		virtual_keyboard_hide();
-	}
-
-	keyboard_type = p_type;
-	text_editor_proxy = OH_TextEditorProxy_Create();
-	attach_options = OH_AttachOptions_Create(true);
-
-	OH_TextEditorProxy_SetGetTextConfigFunc(text_editor_proxy, _get_text_config);
-	OH_TextEditorProxy_SetInsertTextFunc(text_editor_proxy, _insert_text);
-	OH_TextEditorProxy_SetDeleteForwardFunc(text_editor_proxy, _delete_forward);
-	OH_TextEditorProxy_SetDeleteBackwardFunc(text_editor_proxy, _delete_backward);
-	OH_TextEditorProxy_SetSendKeyboardStatusFunc(text_editor_proxy, _send_keyboard_status);
-	OH_TextEditorProxy_SetSendEnterKeyFunc(text_editor_proxy, _send_enter_key);
-	OH_TextEditorProxy_SetMoveCursorFunc(text_editor_proxy, _move_cursor);
-	OH_TextEditorProxy_SetHandleSetSelectionFunc(text_editor_proxy, _handle_set_selection);
-	OH_TextEditorProxy_SetHandleExtendActionFunc(text_editor_proxy, _handle_extend_action);
-	OH_TextEditorProxy_SetGetLeftTextOfCursorFunc(text_editor_proxy, _get_left_text_of_cursor);
-	OH_TextEditorProxy_SetGetRightTextOfCursorFunc(text_editor_proxy, _get_right_text_of_cursor);
-	OH_TextEditorProxy_SetGetTextIndexAtCursorFunc(text_editor_proxy, _get_text_index_at_cursor);
-	OH_TextEditorProxy_SetReceivePrivateCommandFunc(text_editor_proxy, _receive_private_command);
-	OH_TextEditorProxy_SetSetPreviewTextFunc(text_editor_proxy, _set_preview_text);
-	OH_TextEditorProxy_SetFinishTextPreviewFunc(text_editor_proxy, _finish_text_preview);
-
-	InputMethod_ErrorCode code = OH_InputMethodController_Attach(text_editor_proxy, attach_options, &input_method_proxy);
-	ERR_FAIL_COND_MSG(code != IME_ERR_OK, vformat("Failed to attach input method controller: %d.", code));
+	input_manager->virtual_keyboard_show(p_existing_text, p_screen_rect, p_type, p_max_length, p_cursor_start, p_cursor_end);
 }
 
 void DisplayServerOpenHarmony::virtual_keyboard_hide() {
-	if (keyboard_status == IME_KEYBOARD_STATUS_SHOW) {
-		if (OH_InputMethodProxy_HideKeyboard(input_method_proxy) != IME_ERR_OK) {
-			ERR_PRINT("Failed to hide keyboard.");
-		}
-	}
-	if (input_method_proxy) {
-		if (OH_InputMethodController_Detach(input_method_proxy) != IME_ERR_OK) {
-			ERR_PRINT("Failed to detach input method controller.");
-		}
-		input_method_proxy = nullptr;
-	}
-	if (attach_options) {
-		OH_AttachOptions_Destroy(attach_options);
-		attach_options = nullptr;
-	}
-	if (text_editor_proxy) {
-		OH_TextEditorProxy_Destroy(text_editor_proxy);
-		text_editor_proxy = nullptr;
-	}
-	keyboard_status = IME_KEYBOARD_STATUS_NONE;
+	input_manager->virtual_keyboard_hide();
 }
 
 int DisplayServerOpenHarmony::virtual_keyboard_get_height() const {
-	if (keyboard_status == IME_KEYBOARD_STATUS_SHOW) {
-		int height = ohos_wrapper_get_keyboard_avoid_area(OS_OpenHarmony::get_singleton()->get_window_id());
-		return height;
-	}
-	return 0;
+	return input_manager->virtual_keyboard_get_height();
 }
 
 void DisplayServerOpenHarmony::window_set_ime_active(const bool p_active, DisplayServerEnums::WindowID p_window) {
-	ime_active = p_active;
+	input_manager->window_set_ime_active(p_active, p_window);
 }
 
 void DisplayServerOpenHarmony::window_set_ime_position(const Point2i &p_pos, DisplayServerEnums::WindowID p_window) {
-	if (ime_active) {
-		InputMethod_CursorInfo *info = OH_CursorInfo_Create(p_pos.x, p_pos.y, 0, 30);
-		OH_InputMethodProxy_NotifyCursorUpdate(input_method_proxy, info);
-	}
+	input_manager->window_set_ime_position(p_pos, p_window);
+}
+
+void DisplayServerOpenHarmony::clipboard_set(const String &p_text) {
+	input_manager->clipboard_set(p_text);
+}
+
+String DisplayServerOpenHarmony::clipboard_get() const {
+	return input_manager->clipboard_get();
+}
+
+Ref<Image> DisplayServerOpenHarmony::clipboard_get_image() const {
+	return input_manager->clipboard_get_image();
+}
+
+bool DisplayServerOpenHarmony::clipboard_has() const {
+	return input_manager->clipboard_has_text();
+}
+
+bool DisplayServerOpenHarmony::clipboard_has_image() const {
+	return input_manager->clipboard_has_image();
 }
 
 Vector<DisplayServerEnums::WindowID> DisplayServerOpenHarmony::get_window_list() const {
@@ -547,7 +712,8 @@ void DisplayServerOpenHarmony::window_set_title(const String &p_title, DisplaySe
 }
 
 int DisplayServerOpenHarmony::window_get_current_screen(DisplayServerEnums::WindowID p_window) const {
-	return DisplayServerEnums::SCREEN_OF_MAIN_WINDOW;
+	ERR_FAIL_COND_V(p_window != DisplayServerEnums::MAIN_WINDOW_ID, DisplayServerEnums::INVALID_SCREEN);
+	return 0;
 }
 
 void DisplayServerOpenHarmony::window_set_current_screen(int p_screen, DisplayServerEnums::WindowID p_window) {
@@ -591,11 +757,13 @@ void DisplayServerOpenHarmony::window_set_size(const Size2i p_size, DisplayServe
 }
 
 Size2i DisplayServerOpenHarmony::window_get_size(DisplayServerEnums::WindowID p_window) const {
-	return OS_OpenHarmony::get_singleton()->get_display_size();
+	return Size2i(1080, 720);
+	// return OS_OpenHarmony::get_singleton()->get_display_size();
 }
 
 Size2i DisplayServerOpenHarmony::window_get_size_with_decorations(DisplayServerEnums::WindowID p_window) const {
-	return OS_OpenHarmony::get_singleton()->get_display_size();
+	return Size2i(1080, 720);
+	// return OS_OpenHarmony::get_singleton()->get_display_size();
 }
 
 void DisplayServerOpenHarmony::window_set_mode(DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::WindowID p_window) {

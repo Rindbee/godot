@@ -40,6 +40,7 @@
 #include "main/main.h"
 
 #include <native_vsync/native_vsync.h>
+#include <rawfile/raw_file_manager.h>
 
 enum GodotStartupStep {
 	STEP_TERMINATED = -1,
@@ -144,16 +145,13 @@ void godot_step(long long timestamp, void *data) {
 	OH_NativeVSync_RequestFrame(native_vsync, godot_step, nullptr);
 }
 
-int64_t godot_init(NativeResourceManager *p_resource_manager, void *p_native_window, int32_t window_id, int64_t window_width, int64_t window_height, const char *p_allowed_permissions) {
+int64_t godot_init(NativeResourceManager *p_resource_manager, void *p_native_window, int32_t window_id, int64_t window_width, int64_t window_height) {
 	OHNativeWindow *window = static_cast<OHNativeWindow *>(p_native_window);
 
-	FileAccessOpenHarmony::setup(p_resource_manager);
-	DirAccessOpenHarmony::setup(p_resource_manager);
 	os_openharmony = memnew(OS_OpenHarmony);
-	os_openharmony->set_window_id(window_id);
+	os_openharmony->set_native_main_window_id(window_id);
 	os_openharmony->set_native_window(window);
-	os_openharmony->set_display_size(Size2i(window_width, window_height));
-	os_openharmony->set_allowed_permissions(p_allowed_permissions);
+	os_openharmony->set_native_resource_manager(p_resource_manager);
 
 	Vector<String> args;
 	String content;
@@ -182,7 +180,7 @@ int64_t godot_init(NativeResourceManager *p_resource_manager, void *p_native_win
 		}
 	}
 
-	Error err = Main::setup(OS_OpenHarmony::EXEC_PATH, args.size(), (char **)cmdline, false);
+	Error err = Main::setup(os_openharmony->get_executable_path().utf8().get_data(), args.size(), (char **)cmdline, false);
 
 	if (cmdline) {
 		for (int i = 0; i < args.size(); i++) {

@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  rendering_context_driver_vulkan_openharmony.h                         */
+/*  napi_bridge.h                                                         */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,24 +30,49 @@
 
 #pragma once
 
-#ifdef VULKAN_ENABLED
+#include "core/string/ustring.h"
 
-#include "drivers/vulkan/rendering_context_driver_vulkan.h"
+struct napi_env__;
+struct napi_value__;
+struct napi_callback_info__;
 
-class RenderingContextDriverVulkanOpenHarmony : public RenderingContextDriverVulkan {
-	virtual const char *_get_platform_surface_extension() const override final;
+struct ArkUI_Node;
+struct ArkUI_NodeContent;
+struct ArkUI_NodeContentEvent;
+struct OH_ArkUI_SurfaceHolder;
 
-protected:
-	SurfaceID surface_create(const void *p_platform_data) override final;
-	bool _use_validation_layers() const override final;
+class NAPIBridge {
+private:
+	static NAPIBridge singleton;
+
+	static napi_value__ *_bool_to_value(napi_env__ *p_env, bool p_source);
+
+	static void _setup_engine(OH_ArkUI_SurfaceHolder *p_holder);
+
+	static ArkUI_Node *_create_xc(int32_t p_window_id);
+
+	static void _node_content_callback(ArkUI_NodeContentEvent *p_event);
+	static void _create_native_node(ArkUI_NodeContent *p_node, int32_t p_native_window_id);
 
 public:
-	struct WindowPlatformData {
-		OHNativeWindow *window = nullptr;
-	};
+	static napi_value__ *initialize(napi_env__ *p_env, napi_callback_info__ *p_info);
+	static napi_value__ *finalize(napi_env__ *p_env, napi_callback_info__ *p_info);
 
-	RenderingContextDriverVulkanOpenHarmony() = default;
-	~RenderingContextDriverVulkanOpenHarmony() override = default;
+	static napi_value__ *set_main_window_id(napi_env__ *p_env, napi_callback_info__ *p_info);
+
+	static napi_value__ *is_started(napi_env__ *p_env, napi_callback_info__ *p_info);
+	static napi_value__ *iteration(napi_env__ *p_env, napi_callback_info__ *p_info);
+	static napi_value__ *stop(napi_env__ *p_env, napi_callback_info__ *p_info);
+
+	static napi_value__ *focus_out(napi_env__ *p_env, napi_callback_info__ *p_info);
+	static napi_value__ *focus_in(napi_env__ *p_env, napi_callback_info__ *p_info);
+	static napi_value__ *pause(napi_env__ *p_env, napi_callback_info__ *p_info);
+	static napi_value__ *resume(napi_env__ *p_env, napi_callback_info__ *p_info);
+
+	static napi_value__ *create_native_node(napi_env__ *p_env, napi_callback_info__ *p_info);
+
+	static NAPIBridge *get_singleton() { return &singleton; }
+
+	NAPIBridge();
+	~NAPIBridge();
 };
-
-#endif // VULKAN_ENABLED

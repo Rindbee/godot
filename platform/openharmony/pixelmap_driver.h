@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  rendering_context_driver_vulkan_openharmony.h                         */
+/*  pixelmap_driver.h                                                     */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,24 +30,20 @@
 
 #pragma once
 
-#ifdef VULKAN_ENABLED
+#include "core/io/image.h"
 
-#include "drivers/vulkan/rendering_context_driver_vulkan.h"
+struct OH_PixelmapNative;
 
-class RenderingContextDriverVulkanOpenHarmony : public RenderingContextDriverVulkan {
-	virtual const char *_get_platform_surface_extension() const override final;
+namespace PixelmapDriver {
 
-protected:
-	SurfaceID surface_create(const void *p_platform_data) override final;
-	bool _use_validation_layers() const override final;
+Image::Format format_map_pixelmap_to_image(int32_t p_pixel_format);
+int32_t format_map_image_to_pixelmap(Image::Format p_format);
+int32_t get_pixel_bytes(int32_t p_pixel_format);
 
-public:
-	struct WindowPlatformData {
-		OHNativeWindow *window = nullptr;
-	};
+Error pixelmap_get_data_rect(OH_PixelmapNative *p_pixelmap, const Rect2i p_rect, Vector<uint8_t> &r_data);
+Color pixelmap_get_color(OH_PixelmapNative *p_pixelmap, const Point2i &p_position, Error &r_error);
+Error pixelmap_get_image_rect(OH_PixelmapNative *p_pixelmap, const Rect2i p_rect, Ref<Image> &r_image);
+Error pixelmap_to_image(OH_PixelmapNative *p_pixelmap, Ref<Image> &r_image);
+Error image_to_pixelmap(const Ref<Image> &p_image, OH_PixelmapNative *r_pixelmap);
 
-	RenderingContextDriverVulkanOpenHarmony() = default;
-	~RenderingContextDriverVulkanOpenHarmony() override = default;
-};
-
-#endif // VULKAN_ENABLED
+}; // namespace PixelmapDriver

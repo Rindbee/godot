@@ -33,23 +33,36 @@
 #include "core/input/input_event.h"
 #include "servers/display/display_server.h"
 
-#include <inputmethod/inputmethod_controller_capi.h>
-
+class NativeMenu;
 class RenderingContextDriver;
 class RenderingDevice;
+class ScreenManagerOpenharmony;
+class InputManagerOpenHarmony;
+
+struct ArkUI_Node;
+struct ArkUI_NodeEvent;
+struct ArkUI_NodeContent;
+struct ArkUI_NodeContentEvent;
+struct ArkUI_UIInputEvent;
+struct OH_ArkUI_SurfaceHolder;
+struct OH_ArkUI_SurfaceCallback;
 
 class DisplayServerOpenHarmony : public DisplayServer {
+	GDSOFTCLASS(DisplayServerOpenHarmony, DisplayServer);
+
+private:
+	friend class NAPIBridge;
+
+	ScreenManagerOpenharmony *screen_manager = nullptr;
+	InputManagerOpenHarmony *input_manager = nullptr;
+
+	Point2 last_click_pos;
+	uint64_t last_click_ms = 0;
+
 	String rendering_driver;
 	RenderingContextDriver *rendering_context = nullptr;
 	RenderingDevice *rendering_device = nullptr;
 	ObjectID window_attached_instance_id;
-
-	bool ime_active = false;
-	DisplayServerEnums::VirtualKeyboardType keyboard_type = DisplayServerEnums::KEYBOARD_TYPE_DEFAULT;
-	InputMethod_KeyboardStatus keyboard_status = IME_KEYBOARD_STATUS_NONE;
-	InputMethod_TextEditorProxy *text_editor_proxy = nullptr;
-	InputMethod_AttachOptions *attach_options = nullptr;
-	InputMethod_InputMethodProxy *input_method_proxy = nullptr;
 
 	Callable window_event_callback;
 	Callable window_resize_callback;
@@ -59,23 +72,37 @@ class DisplayServerOpenHarmony : public DisplayServer {
 	void _window_callback(const Callable &p_callable, const Variant &p_arg, bool p_deferred = false) const;
 	static void _dispatch_input_events(const Ref<InputEvent> &p_event);
 
-	static void _get_text_config(InputMethod_TextEditorProxy *p_text_editor_proxy, InputMethod_TextConfig *p_text_config);
-	static void _insert_text(InputMethod_TextEditorProxy *p_text_editor_proxy, const char16_t *p_text, size_t length);
-	static void _delete_forward(InputMethod_TextEditorProxy *p_text_editor_proxy, int32_t length);
-	static void _delete_backward(InputMethod_TextEditorProxy *p_text_editor_proxy, int32_t length);
-	static void _send_keyboard_status(InputMethod_TextEditorProxy *p_text_editor_proxy, InputMethod_KeyboardStatus keyboard_status);
-	static void _send_enter_key(InputMethod_TextEditorProxy *p_text_editor_proxy, InputMethod_EnterKeyType enter_key_type);
-	static void _move_cursor(InputMethod_TextEditorProxy *p_text_editor_proxy, InputMethod_Direction direction);
-	static void _handle_set_selection(InputMethod_TextEditorProxy *p_text_editor_proxy, int32_t start, int32_t end);
-	static void _handle_extend_action(InputMethod_TextEditorProxy *p_text_editor_proxy, InputMethod_ExtendAction action);
-	static void _get_left_text_of_cursor(InputMethod_TextEditorProxy *p_text_editor_proxy, int32_t number, char16_t *p_text, size_t *p_length);
-	static void _get_right_text_of_cursor(InputMethod_TextEditorProxy *p_text_editor_proxy, int32_t number, char16_t *p_text, size_t *p_length);
-	static int32_t _get_text_index_at_cursor(InputMethod_TextEditorProxy *p_text_editor_proxy);
-	static int32_t _receive_private_command(InputMethod_TextEditorProxy *p_text_editor_proxy, InputMethod_PrivateCommand *p_command[], size_t length);
-	static int32_t _set_preview_text(InputMethod_TextEditorProxy *p_text_editor_proxy, const char16_t *p_text, size_t length, int32_t start, int32_t end);
-	static void _finish_text_preview(InputMethod_TextEditorProxy *p_text_editor_proxy);
+	struct NodeData {
+		int32_t window_id = -1;
+		ArkUI_NodeContent *parent = nullptr;
+		ArkUI_Node *node = nullptr;
+		OH_ArkUI_SurfaceHolder *holder = nullptr;
+		OH_ArkUI_SurfaceCallback *callback = nullptr;
 
-	static void _input_text_key(Key p_key, char32_t p_char, Key p_unshifted, Key p_physical, int p_modifier, bool p_pressed, KeyLocation p_location);
+		~NodeData();
+	};
+
+	HashMap<int32_t, NodeData *> window_node_map;
+	HashMap<ArkUI_Node *, NodeData *> node_datas;
+
+	static void _surface_created_native(OH_ArkUI_SurfaceHolder *p_holder);
+	static void _surface_changed_native(OH_ArkUI_SurfaceHolder *p_holder, uint64_t p_width, uint64_t p_height);
+	static void _surface_destroyed_native(OH_ArkUI_SurfaceHolder *p_holder);
+	static void _surface_show_native(OH_ArkUI_SurfaceHolder *p_holder);
+	static void _surface_hide_native(OH_ArkUI_SurfaceHolder *p_holder);
+	static void _frame_callback_native(ArkUI_Node *p_node, uint64_t p_timestamp, uint64_t p_target_timestamp);
+
+	MouseButton _map_mouse_button(int32_t p_button);
+	void _parse_mouse_event_from(ArkUI_UIInputEvent *p_source_event, const Ref<InputEventMouse> &p_event);
+	void _parse_modifiers_from(const ArkUI_UIInputEvent *p_source_event, const Ref<InputEventWithModifiers> &p_event);
+
+	void _parse_touch_event(ArkUI_UIInputEvent *p_event);
+	void _parse_axis_event(ArkUI_UIInputEvent *p_event);
+	void _parse_mouse_event(ArkUI_UIInputEvent *p_event);
+	void _parse_key_event(ArkUI_UIInputEvent *p_event);
+	static void _input(ArkUI_NodeEvent *p_event);
+
+	NativeMenu *native_menu = nullptr;
 
 public:
 	static DisplayServerOpenHarmony *get_singleton();
@@ -92,41 +119,68 @@ public:
 
 	virtual bool has_feature(DisplayServerEnums::Feature p_feature) const override;
 	virtual String get_name() const override;
+
+	/* SCREEN */
+
+	virtual TypedArray<Rect2> get_display_cutouts(int p_screen = DisplayServerEnums::SCREEN_OF_MAIN_WINDOW) const override;
+	// virtual Rect2i get_display_safe_area() const { return screen_get_usable_rect(); }
 	virtual int get_screen_count() const override;
 	virtual int get_primary_screen() const override;
+	// virtual int get_keyboard_focus_screen() const { return get_primary_screen(); }
+	virtual int get_screen_from_rect(const Rect2 &p_rect) const override;
 	virtual Point2i screen_get_position(int p_screen = DisplayServerEnums::SCREEN_OF_MAIN_WINDOW) const override;
 	virtual Size2i screen_get_size(int p_screen = DisplayServerEnums::SCREEN_OF_MAIN_WINDOW) const override;
 	virtual Rect2i screen_get_usable_rect(int p_screen = DisplayServerEnums::SCREEN_OF_MAIN_WINDOW) const override;
 	virtual int screen_get_dpi(int p_screen = DisplayServerEnums::SCREEN_OF_MAIN_WINDOW) const override;
 	virtual float screen_get_scale(int p_screen = DisplayServerEnums::SCREEN_OF_MAIN_WINDOW) const override;
 	virtual float screen_get_refresh_rate(int p_screen = DisplayServerEnums::SCREEN_OF_MAIN_WINDOW) const override;
+	virtual Color screen_get_pixel(const Point2i &p_position) const override;
+	virtual Ref<Image> screen_get_image(int p_screen) const override;
+	virtual Ref<Image> screen_get_image_rect(const Rect2i &p_rect) const override;
 	virtual bool is_touchscreen_available() const override;
-
-	virtual Point2i mouse_get_position() const override { return Point2i(); }
-	virtual void mouse_set_mode(DisplayServerEnums::MouseMode p_mode) override {}
-	virtual DisplayServerEnums::MouseMode mouse_get_mode() const override { return DisplayServerEnums::MOUSE_MODE_VISIBLE; }
-	virtual void mouse_set_mode_override(DisplayServerEnums::MouseMode p_mode) override {}
-	virtual DisplayServerEnums::MouseMode mouse_get_mode_override() const override { return DisplayServerEnums::MOUSE_MODE_VISIBLE; }
-	virtual void mouse_set_mode_override_enabled(bool p_override_enabled) override {}
-	virtual bool mouse_is_mode_override_enabled() const override { return false; }
-	virtual void warp_mouse(const Point2i &p_position) override {}
-	virtual BitField<MouseButtonMask> mouse_get_button_state() const override { return BitField<MouseButtonMask>(0); }
-
 	virtual void screen_set_orientation(DisplayServerEnums::ScreenOrientation p_orientation, int p_screen = DisplayServerEnums::SCREEN_OF_MAIN_WINDOW) override;
 	virtual DisplayServerEnums::ScreenOrientation screen_get_orientation(int p_screen = DisplayServerEnums::SCREEN_OF_MAIN_WINDOW) const override;
-
-	virtual void clipboard_set(const String &p_text) override;
-	virtual String clipboard_get() const override;
-
 	virtual void screen_set_keep_on(bool p_enable) override;
 	virtual bool screen_is_kept_on() const override;
+
+	/* MOUSE */
+
+	virtual void mouse_set_mode(DisplayServerEnums::MouseMode p_mode) override;
+	virtual DisplayServerEnums::MouseMode mouse_get_mode() const override;
+	virtual void mouse_set_mode_override(DisplayServerEnums::MouseMode p_mode) override;
+	virtual DisplayServerEnums::MouseMode mouse_get_mode_override() const override;
+	virtual void mouse_set_mode_override_enabled(bool p_override_enabled) override;
+	virtual bool mouse_is_mode_override_enabled() const override;
+
+	virtual void warp_mouse(const Point2i &p_position) override;
+	virtual Point2i mouse_get_position() const override;
+	virtual BitField<MouseButtonMask> mouse_get_button_state() const override;
+
+	virtual void cursor_set_shape(DisplayServerEnums::CursorShape p_shape) override;
+	virtual DisplayServerEnums::CursorShape cursor_get_shape() const override;
+	virtual void cursor_set_custom_image(const Ref<Resource> &p_cursor, DisplayServerEnums::CursorShape p_shape = DisplayServerEnums::CURSOR_ARROW, const Vector2 &p_hotspot = Vector2()) override;
+
+	/* KEYBOARD */
+
+	virtual Point2i ime_get_selection() const override;
+	virtual String ime_get_text() const override;
 
 	virtual void virtual_keyboard_show(const String &p_existing_text, const Rect2 &p_screen_rect = Rect2(), DisplayServerEnums::VirtualKeyboardType p_type = DisplayServerEnums::KEYBOARD_TYPE_DEFAULT, int p_max_length = -1, int p_cursor_start = -1, int p_cursor_end = -1) override;
 	virtual void virtual_keyboard_hide() override;
 	virtual int virtual_keyboard_get_height() const override;
 
+	/* INPUT METHOD */
+
 	virtual void window_set_ime_active(const bool p_active, DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) override;
 	virtual void window_set_ime_position(const Point2i &p_pos, DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) override;
+
+	/* CLIPBOARD */
+
+	virtual void clipboard_set(const String &p_text) override;
+	virtual String clipboard_get() const override;
+	virtual Ref<Image> clipboard_get_image() const override;
+	virtual bool clipboard_has() const override;
+	virtual bool clipboard_has_image() const override;
 
 	virtual Vector<DisplayServerEnums::WindowID> get_window_list() const override;
 	virtual DisplayServerEnums::WindowID get_window_at_screen_position(const Point2i &p_position) const override;

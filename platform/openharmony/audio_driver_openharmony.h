@@ -30,40 +30,43 @@
 
 #pragma once
 
+#include "core/os/mutex.h"
 #include "servers/audio/audio_server.h"
 
-#include <ohaudio/native_audiocapturer.h>
-#include <ohaudio/native_audiorenderer.h>
-#include <ohaudio/native_audiostreambuilder.h>
+typedef struct OH_AudioStreamBuilderStruct OH_AudioStreamBuilder;
+typedef struct OH_AudioRendererStruct OH_AudioRenderer;
+typedef struct OH_AudioCapturerStruct OH_AudioCapturer;
+struct OH_AudioDeviceDescriptorArray;
 
 class AudioDriverOpenHarmony : public AudioDriver {
+	int mix_rate = 0;
+	int target_latency_ms = 0;
+	int buffer_frames = 0;
+	int32_t buffer_samples = 0;
+
 	bool active = false;
 	Mutex mutex;
-	bool pause = false;
+	std::atomic<bool> pause{ false };
 
-	uint32_t buffer_size = 0;
 	int32_t *mixdown_buffer = nullptr;
 
 	OH_AudioStreamBuilder *audio_stream_builder = nullptr;
 	OH_AudioRenderer *audio_renderer = nullptr;
 
+	int32_t _write_renderer_data(OH_AudioRenderer *p_renderer, void *p_audio_data, int32_t p_audio_data_size);
+	static int32_t _renderer_write_data_callback(OH_AudioRenderer *p_renderer, void *p_user_data, void *p_audio_data, int32_t p_audio_data_size);
+
 	OH_AudioStreamBuilder *audio_stream_capture_builder = nullptr;
 	OH_AudioCapturer *audio_capturer = nullptr;
 
-	OH_AudioData_Callback_Result _buffer_callback(OH_AudioRenderer *renderer, void *userData, void *audioData, int32_t audioDataSize);
-	static OH_AudioData_Callback_Result _buffer_callbacks(OH_AudioRenderer *renderer, void *userData, void *audioData, int32_t audioDataSize);
+	// Capturer callback functions.
+	int32_t _capturer_read_data(OH_AudioCapturer *p_capturer, void *p_buffer, int32_t p_length);
 
-	// Capturer callback functions
-	int32_t _capturer_read_data(OH_AudioCapturer *capturer, void *buffer, int32_t length);
-	static int32_t _on_capturer_read_data(OH_AudioCapturer *capturer, void *userData, void *buffer, int32_t length);
-	static int32_t _on_capturer_error(OH_AudioCapturer *capturer, void *userData, OH_AudioStream_Result error);
-	static int32_t _on_capturer_interrupt_event(OH_AudioCapturer *capturer, void *userData, OH_AudioInterrupt_ForceType type, OH_AudioInterrupt_Hint hint);
-	static int32_t _on_capturer_stream_event(OH_AudioCapturer *capturer, void *userData, OH_AudioStream_Event event);
+	static void _capturer_read_data_callback(OH_AudioCapturer *p_capturer, void *p_user_data, void *p_buffer, int32_t p_length);
+	static void _capturer_device_change_callback(OH_AudioCapturer *p_capturer, void *p_user_data, OH_AudioDeviceDescriptorArray *p_device_array);
 
 public:
-	virtual const char *get_name() const override {
-		return "OpenHarmony";
-	}
+	virtual const char *get_name() const override { return "OpenHarmony"; }
 
 	virtual Error init() override;
 	virtual void start() override;
@@ -80,4 +83,5 @@ public:
 	void set_pause(bool p_pause);
 
 	AudioDriverOpenHarmony();
+	~AudioDriverOpenHarmony();
 };

@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  rendering_context_driver_vulkan_openharmony.h                         */
+/*  window_data_openharmony.cpp                                           */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,26 +28,49 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#include "window_data_openharmony.h"
 
-#ifdef VULKAN_ENABLED
+#include <window_manager/oh_window.h>
 
-#include "drivers/vulkan/rendering_context_driver_vulkan.h"
+bool WindowData::setup(int32_t p_native_window_id) {
+	WindowManager_WindowProperties window_properties;
+	if (OH_WindowManager_GetWindowProperties(p_native_window_id, &window_properties) != OK) {
+		return false;
+	}
+	position[0] = window_properties.windowRect.posX;
+	position[1] = window_properties.windowRect.posY;
+	size[0] = window_properties.windowRect.width;
+	size[1] = window_properties.windowRect.height;
 
-class RenderingContextDriverVulkanOpenHarmony : public RenderingContextDriverVulkan {
-	virtual const char *_get_platform_surface_extension() const override final;
+	drawable_position[0] = window_properties.drawableRect.posX;
+	drawable_position[1] = window_properties.drawableRect.posY;
+	drawable_size[0] = window_properties.drawableRect.width;
+	drawable_size[1] = window_properties.drawableRect.height;
 
-protected:
-	SurfaceID surface_create(const void *p_platform_data) override final;
-	bool _use_validation_layers() const override final;
+	switch (window_properties.type) {
+		case WINDOW_MANAGER_WINDOW_TYPE_APP: {
+			type = TYPE_APP;
+		} break;
+		case WINDOW_MANAGER_WINDOW_TYPE_MAIN: {
+			type = TYPE_MAIN;
+		} break;
+		case WINDOW_MANAGER_WINDOW_TYPE_FLOAT: {
+			type = TYPE_FLOAT;
+		} break;
+		case WINDOW_MANAGER_WINDOW_TYPE_DIALOG: {
+			type = TYPE_DIALOG;
+		} break;
+	}
+	is_fullscreen = window_properties.isFullScreen;
+	is_layout_fullscreen = window_properties.isLayoutFullScreen;
+	focusable = window_properties.focusable;
+	touchable = window_properties.touchable;
+	brightness = window_properties.brightness;
+	is_keep_screen_on = window_properties.isKeepScreenOn;
+	is_privacy_mode = window_properties.isPrivacyMode;
+	is_transparent = window_properties.isTransparent;
+	native_window_id = window_properties.id;
+	native_display_id = window_properties.displayId;
 
-public:
-	struct WindowPlatformData {
-		OHNativeWindow *window = nullptr;
-	};
-
-	RenderingContextDriverVulkanOpenHarmony() = default;
-	~RenderingContextDriverVulkanOpenHarmony() override = default;
-};
-
-#endif // VULKAN_ENABLED
+	return true;
+}

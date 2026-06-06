@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  Index.d.ts                                                            */
+/*  window_data_openharmony.h                                             */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,49 +28,36 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-import { resourceManager } from "@kit.LocalizationKit";
+#pragma once
 
-export class SimplifiedTouchEvent {
-  public type: number
-  public id: number
-  public x: number
-  public y: number
-}
+#include <cstdint>
 
-export class SimplifiedKeyEvent {
-  public code: number
-  public unicode: number
-  public pressed: boolean
-  public alt: boolean
-  public ctrl: boolean
-  public shift: boolean
-  public meta: boolean
-}
+struct WindowData {
+	enum WindowType {
+		TYPE_APP = 0,
+		TYPE_MAIN = 1,
+		TYPE_FLOAT = 8,
+		TYPE_DIALOG = 16,
+	};
 
-export class SimplifiedMouseEvent {
-  public type: number
-  public button: number
-  public mask: number
-  public x: number
-  public y: number
-}
+	int32_t position[2] = {};
+	uint32_t size[2] = {};
+	int32_t drawable_position[2] = {};
+	uint32_t drawable_size[2] = {};
+	WindowType type = TYPE_MAIN;
+	bool is_fullscreen = false;
+	bool is_layout_fullscreen = false;
+	bool focusable = true;
+	bool touchable = false;
+	float brightness = 0.0f;
+	bool is_keep_screen_on = false;
+	bool is_privacy_mode = false;
+	bool is_transparent = false;
+	uint32_t native_window_id = 0;
+	uint32_t native_display_id = 0;
 
-export const setResourceManager: (resourceManager: resourceManager.ResourceManager) => any;
+	bool setup(int32_t p_native_window_id);
 
-export const setWindowId: (id: number) => any;
-
-export const setSurfaceId: (id: BigInt) => any;
-
-export const changeSurface: (id: BigInt, w: number, h: number) => any;
-
-export const destroySurface: (id: BigInt) => any;
-
-export const sendWindowEvent: (id: number) => any;
-
-export const setup: (allowed_permissions: string) => any;
-
-export const inputTouch: (events: SimplifiedTouchEvent[]) => any;
-
-export const inputKey: (events: SimplifiedKeyEvent) => any;
-
-export const inputMouse: (events: SimplifiedMouseEvent) => any;
+	WindowData();
+	~WindowData();
+};

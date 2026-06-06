@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  rendering_context_driver_vulkan_openharmony.h                         */
+/*  key_mapping_openharmony.h                                             */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,24 +30,30 @@
 
 #pragma once
 
-#ifdef VULKAN_ENABLED
+#include "core/os/keyboard.h"
+#include "core/templates/hash_map.h"
 
-#include "drivers/vulkan/rendering_context_driver_vulkan.h"
+// This provides translation from OpenHarmony virtual key codes to Godot and back.
+// Values can be found in <ace/xcomponent/native_xcomponent_key_event.h> and/or
+// <multimodalinput/oh_key_code.h>.
 
-class RenderingContextDriverVulkanOpenHarmony : public RenderingContextDriverVulkan {
-	virtual const char *_get_platform_surface_extension() const override final;
-
-protected:
-	SurfaceID surface_create(const void *p_platform_data) override final;
-	bool _use_validation_layers() const override final;
-
-public:
-	struct WindowPlatformData {
-		OHNativeWindow *window = nullptr;
+class KeyMappingOpenHarmony {
+	struct HashMapHasherKeys {
+		static _FORCE_INLINE_ uint32_t hash(const Key p_key) { return hash_fmix32(static_cast<uint32_t>(p_key)); }
+		static _FORCE_INLINE_ uint32_t hash(const int32_t p_key) { return hash_fmix32(p_key); }
 	};
 
-	RenderingContextDriverVulkanOpenHarmony() = default;
-	~RenderingContextDriverVulkanOpenHarmony() override = default;
-};
+	static inline HashMap<int32_t, Key, HashMapHasherKeys> keysym_maps;
+	static inline HashMap<Key, int32_t, HashMapHasherKeys> keysym_map_inv;
+	static inline HashMap<int32_t, KeyLocation, HashMapHasherKeys> location_map;
 
-#endif // VULKAN_ENABLED
+	KeyMappingOpenHarmony() {}
+
+public:
+	static void initialize();
+
+	static bool is_sym_numpad(int32_t p_keysym);
+	static Key map_key(int32_t p_keysym); // Translates an OpenHarmony keycode to a Godot keycode.
+	static int32_t unmap_key(Key p_key); // Translates a Godot keycode to an OpenHarmony keycode.
+	static KeyLocation get_location(int32_t p_keysym);
+};
