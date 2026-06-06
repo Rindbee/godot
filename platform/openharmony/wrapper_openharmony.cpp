@@ -30,6 +30,7 @@
 
 #include "wrapper_openharmony.h"
 
+#include <filemanagement/environment/oh_environment.h>
 #include <window_manager/oh_display_manager.h>
 #include <window_manager/oh_window.h>
 
@@ -68,18 +69,30 @@ WrapperScreenOrientation ohos_wrapper_get_display_orientation() {
 	}
 }
 
-void ohos_wrapper_screen_set_keep_on(int32_t window_id, bool p_enable) {
-	OH_WindowManager_SetWindowKeepScreenOn(window_id, p_enable);
+void ohos_wrapper_screen_set_keep_on(int32_t p_native_window_id, bool p_enable) {
+	OH_WindowManager_SetWindowKeepScreenOn(p_native_window_id, p_enable);
 }
 
-bool ohos_wrapper_screen_is_kept_on(int32_t window_id) {
+bool ohos_wrapper_screen_is_kept_on(int32_t p_native_window_id) {
 	WindowManager_WindowProperties properties;
-	OH_WindowManager_GetWindowProperties(window_id, &properties);
+	OH_WindowManager_GetWindowProperties(p_native_window_id, &properties);
 	return properties.isKeepScreenOn;
 }
 
-int ohos_wrapper_get_keyboard_avoid_area(int32_t window_id) {
+int ohos_wrapper_get_keyboard_avoid_area(int32_t p_native_window_id) {
 	WindowManager_AvoidArea area;
-	OH_WindowManager_GetWindowAvoidArea(window_id, WINDOW_MANAGER_AVOID_AREA_TYPE_KEYBOARD, &area);
+	OH_WindowManager_GetWindowAvoidArea(p_native_window_id, WINDOW_MANAGER_AVOID_AREA_TYPE_KEYBOARD, &area);
 	return area.bottomRect.height;
+}
+
+bool ohos_wrapper_get_user_desktop_dir(char **r_path) {
+	return OH_Environment_GetUserDesktopDir(r_path) == ERR_OK;
+}
+
+bool ohos_wrapper_get_user_document_dir(char **r_path) {
+	return OH_Environment_GetUserDocumentDir(r_path) == ERR_OK;
+}
+
+bool ohos_wrapper_get_user_download_dir(char **r_path) {
+	return OH_Environment_GetUserDownloadDir(r_path) == ERR_OK;
 }

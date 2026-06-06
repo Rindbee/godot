@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  bridge_openharmony.h                                                  */
+/*  window_data_openharmony.h                                             */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,40 +30,34 @@
 
 #pragma once
 
-#include <rawfile/raw_file_manager.h>
-
 #include <cstdint>
 
-extern "C" {
-typedef struct GodotTouchEvent {
-	uint32_t type;
-	uint32_t id;
-	float x;
-	float y;
-} GodotTouchEvent;
+struct WindowData {
+	enum WindowType {
+		TYPE_APP = 0,
+		TYPE_MAIN = 1,
+		TYPE_FLOAT = 8,
+		TYPE_DIALOG = 16,
+	};
 
-typedef struct GodotKeyEvent {
-	uint32_t code;
-	char32_t unicode;
-	bool pressed;
-	bool alt;
-	bool ctrl;
-	bool shift;
-	bool meta;
-} GodotKeyEvent;
+	int32_t position[2] = {};
+	uint32_t size[2] = {};
+	int32_t drawable_position[2] = {};
+	uint32_t drawable_size[2] = {};
+	WindowType type = TYPE_MAIN;
+	bool is_fullscreen = false;
+	bool is_layout_fullscreen = false;
+	bool focusable = true;
+	bool touchable = false;
+	float brightness = 0.0f;
+	bool is_keep_screen_on = false;
+	bool is_privacy_mode = false;
+	bool is_transparent = false;
+	uint32_t native_window_id = 0;
+	uint32_t native_display_id = 0;
 
-typedef struct GodotMouseEvent {
-	uint32_t type;
-	uint32_t button;
-	uint32_t mask;
-	float x;
-	float y;
-} GodotMouseEvent;
+	bool setup(int32_t p_native_window_id);
 
-int64_t godot_init(NativeResourceManager *p_resource_manager, void *p_native_window, int32_t window_id, int64_t window_width, int64_t window_height, const char *p_allowed_permissions);
-void godot_touch(GodotTouchEvent *p_event, int count);
-void godot_mouse(GodotMouseEvent *p_event);
-void godot_key(GodotKeyEvent *p_event);
-void godot_resize(uint32_t width, uint32_t height);
-void godot_window_event(int32_t event);
-}
+	WindowData();
+	~WindowData();
+};

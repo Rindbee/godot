@@ -1,0 +1,6 @@
+{
+  "name": "libgodot.so",
+  "types": "./Index.d.ts",
+  "version": "1.0.0",
+  "description": "Godot NAPI bridge types."
+}

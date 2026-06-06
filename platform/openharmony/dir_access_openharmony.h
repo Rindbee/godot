@@ -32,29 +32,30 @@
 
 #include "drivers/unix/dir_access_unix.h"
 
-#include <rawfile/raw_dir.h>
-#include <rawfile/raw_file_manager.h>
+struct RawDir;
 
 class DirAccessOpenHarmony : public DirAccessUnix {
-	static NativeResourceManager *resource_manager;
+	GDSOFTCLASS(DirAccessOpenHarmony, DirAccessUnix);
+
 	RawDir *_rawdir = nullptr;
-	int _rawdir_counter = 0;
-	int _rawfile_count = 0;
+	int rawdir_counter = 0;
+	int rawfile_count = 0;
 	bool _is_rawdir = false;
-	String _cpath;
+	bool _cisdir = false;
 
 protected:
 	String get_absolute_path(String p_path);
 	bool is_in_bundle(String p_path);
 
 public:
-	static void setup(NativeResourceManager *p_resource_manager);
-
 	virtual Error list_dir_begin() override;
 	virtual String get_next() override;
 	virtual bool current_is_dir() const override;
 	virtual bool current_is_hidden() const override;
 	virtual void list_dir_end() override;
+
+	virtual int get_drive_count() override;
+	virtual String get_drive(int p_drive) override;
 
 	virtual Error change_dir(String p_dir) override;
 	virtual String get_current_dir(bool p_include_drive = true) const override;

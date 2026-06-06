@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  file_access_openharmony.h                                             */
+/*  AbilityStage.ets                                                      */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,53 +28,45 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+import { AbilityStage, Want } from "@kit.AbilityKit";
+import { HashMap } from "@kit.ArkTS";
 
-#include "drivers/unix/file_access_unix.h"
+export default class GodotAbilityStage extends AbilityStage {
+  private project_ids: HashMap<string, number> = new HashMap();
+  private id_counter = 0;
 
-struct RawFile64;
+  private parse_id(want: Want): number {
+    let project_id = want.parameters?.godot_project_id as string;
+    if (!project_id) {
+      project_id = "ProjectManager";
+    }
+    let id = 0;
+    try {
+      if (this.project_ids.hasKey(project_id)) {
+        id = this.project_ids.get(project_id);
+      } else {
+        id = this.id_counter++;
+        this.project_ids.set(project_id, id);
+      }
+    } catch (error) {}
+    return id;
+  }
 
-class FileAccessOpenHarmony : public FileAccessUnix {
-	GDSOFTCLASS(FileAccessOpenHarmony, FileAccessUnix);
+  onAcceptWant(want: Want): string {
+    let id = this.parse_id(want);
+    return `Godot${id}`;
+  }
+  async onAcceptWantAsync(want: Want): Promise<string> {
+    let id = this.parse_id(want);
+    return `Godot${id}`;
+  }
 
-	RawFile64 *rawfile = nullptr;
-	bool is_rawfile = false;
-	String cpath;
-
-protected:
-	bool is_in_bundle(String p_path);
-
-public:
-	static Error get_rawfile_content(const char *p_path, String &r_content);
-
-	virtual Error open_internal(const String &p_path, int p_mode_flags) override;
-	virtual bool is_open() const override;
-
-	virtual String get_path() const override;
-	virtual String get_path_absolute() const override;
-
-	virtual void seek(uint64_t p_position) override;
-	virtual void seek_end(int64_t p_position = 0) override;
-	virtual uint64_t get_position() const override;
-	virtual uint64_t get_length() const override;
-
-	virtual bool eof_reached() const override;
-	virtual uint64_t get_buffer(uint8_t *p_dst, uint64_t p_length) const override;
-
-	virtual Error get_error() const override;
-
-	virtual Error resize(int64_t p_length) override;
-	virtual void flush() override;
-	virtual bool store_buffer(const uint8_t *p_src, uint64_t p_length) override;
-
-	virtual bool file_exists(const String &p_path) override;
-
-	virtual uint64_t _get_modified_time(const String &p_file) override;
-	virtual BitField<FileAccess::UnixPermissionFlags> _get_unix_permissions(const String &p_file) override;
-	virtual Error _set_unix_permissions(const String &p_file, BitField<FileAccess::UnixPermissionFlags> p_permissions) override;
-
-	virtual void close() override;
-
-	FileAccessOpenHarmony();
-	virtual ~FileAccessOpenHarmony();
-};
+  onNewProcessRequest(want: Want): string {
+    let id = this.parse_id(want);
+    return `GodotProcess${id}`;
+  }
+  async onNewProcessRequestAsync(want: Want): Promise<string> {
+    let id = this.parse_id(want);
+    return `GodotProcess${id}`;
+  }
+}

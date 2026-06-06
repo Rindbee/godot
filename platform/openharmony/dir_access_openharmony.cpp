@@ -35,12 +35,6 @@
 #include <rawfile/raw_dir.h>
 #include <rawfile/raw_file_manager.h>
 
-NativeResourceManager *DirAccessOpenHarmony::resource_manager = nullptr;
-
-void DirAccessOpenHarmony::setup(NativeResourceManager *p_resource_manager) {
-	DirAccessOpenHarmony::resource_manager = p_resource_manager;
-}
-
 String DirAccessOpenHarmony::get_absolute_path(String p_path) {
 	if (p_path.is_relative_path()) {
 		p_path = current_dir.path_join(p_path);
@@ -54,43 +48,44 @@ bool DirAccessOpenHarmony::is_in_bundle(String p_path) {
 }
 
 Error DirAccessOpenHarmony::list_dir_begin() {
-	if (_is_rawdir) {
-		list_dir_end();
-
-		String raw_dir = current_dir.trim_prefix(OS_OpenHarmony::get_singleton()->get_bundle_resource_dir());
-		_rawdir = OH_ResourceManager_OpenRawDir(resource_manager, raw_dir.utf8().get_data());
-		_rawfile_count = OH_ResourceManager_GetRawFileCount(_rawdir);
-		_rawdir_counter = 0;
-		return OK;
+	if (!_is_rawdir) {
+		return DirAccessUnix::list_dir_begin();
 	}
-	return DirAccessUnix::list_dir_begin();
+
+	list_dir_end();
+	String raw_dir = current_dir.trim_prefix(OS_OpenHarmony::get_singleton()->get_bundle_resource_dir());
+	_rawdir = OH_ResourceManager_OpenRawDir(OS_OpenHarmony::get_singleton()->get_native_resource_manager(), raw_dir.utf8().get_data());
+	if (!_rawdir) {
+		return ERR_CANT_OPEN;
+	}
+	rawfile_count = OH_ResourceManager_GetRawFileCount(_rawdir);
+	rawdir_counter = 0;
+	return OK;
 }
 
 String DirAccessOpenHarmony::get_next() {
-	if (_is_rawdir) {
-		if (!_rawdir) {
-			return "";
-		}
-		if (_rawdir_counter >= _rawfile_count) {
-			list_dir_end();
-			return "";
-		}
-
-		_cpath = OH_ResourceManager_GetRawFileName(_rawdir, _rawdir_counter);
-		_rawdir_counter++;
-		return _cpath.get_file();
+	if (!_is_rawdir) {
+		return DirAccessUnix::get_next();
 	}
-	return DirAccessUnix::get_next();
+
+	if (!_rawdir) {
+		return "";
+	}
+	if (rawdir_counter >= rawfile_count) {
+		list_dir_end();
+		return "";
+	}
+
+	const char *row_file_name = OH_ResourceManager_GetRawFileName(_rawdir, rawdir_counter);
+	_cisdir = OH_ResourceManager_IsRawDir(OS_OpenHarmony::get_singleton()->get_native_resource_manager(), row_file_name);
+	rawdir_counter++;
+	return String::utf8(row_file_name);
 }
 
 bool DirAccessOpenHarmony::current_is_dir() const {
 	if (_is_rawdir) {
-		if (!_rawdir) {
-			return false;
-		}
-		return !OH_ResourceManager_IsRawDir(resource_manager, _cpath.utf8().get_data());
+		return _cisdir;
 	}
-
 	return DirAccessUnix::current_is_dir();
 }
 
@@ -102,28 +97,84 @@ bool DirAccessOpenHarmony::current_is_hidden() const {
 }
 
 void DirAccessOpenHarmony::list_dir_end() {
-	if (_is_rawdir) {
-		if (_rawdir) {
-			OH_ResourceManager_CloseRawDir(_rawdir);
-			_rawdir = nullptr;
-		}
+	if (!_is_rawdir) {
+		DirAccessUnix::list_dir_end();
 		return;
 	}
-	DirAccessUnix::list_dir_end();
+	if (_rawdir) {
+		OH_ResourceManager_CloseRawDir(_rawdir);
+		_rawdir = nullptr;
+		_cisdir = false;
+	}
+}
+
+static void _get_drives(List<String> *list) {
+	// Add root.
+	list->push_back("/");
+
+	// Add $HOME.
+	const char *home = getenv("HOME");
+	if (home) {
+		// Only add if it's not a duplicate
+		String home_name = String::utf8(home);
+		if (!list->find(home_name)) {
+			list->push_back(home_name);
+		}
+
+		// Add Desktop dir.
+		String dpath = OS::get_singleton()->get_system_dir(OS::SystemDir::SYSTEM_DIR_DESKTOP);
+		if (!dpath.is_empty() && !list->find(dpath)) {
+			list->push_back(dpath);
+		}
+
+		// Add Document dir.
+		dpath = OS::get_singleton()->get_system_dir(OS::SystemDir::SYSTEM_DIR_DOCUMENTS);
+		if (!dpath.is_empty() && !list->find(dpath)) {
+			list->push_back(dpath);
+		}
+
+		// Add Download dir.
+		dpath = OS::get_singleton()->get_system_dir(OS::SystemDir::SYSTEM_DIR_DOWNLOADS);
+		if (!dpath.is_empty() && !list->find(dpath)) {
+			list->push_back(dpath);
+		}
+	}
+
+	// Add sandbox files path.
+	list->push_back(OS_OpenHarmony::get_singleton()->get_data_path());
+
+	list->sort();
+}
+
+int DirAccessOpenHarmony::get_drive_count() {
+	List<String> list;
+	_get_drives(&list);
+
+	return list.size();
+}
+
+String DirAccessOpenHarmony::get_drive(int p_drive) {
+	List<String> list;
+	_get_drives(&list);
+
+	ERR_FAIL_INDEX_V(p_drive, list.size(), "");
+
+	return list.get(p_drive);
 }
 
 Error DirAccessOpenHarmony::change_dir(String p_dir) {
 	p_dir = get_absolute_path(p_dir);
-	if (is_in_bundle(p_dir)) {
-		if (!dir_exists(p_dir)) {
-			return ERR_INVALID_PARAMETER;
-		}
-		list_dir_end();
-		current_dir = p_dir;
-		_is_rawdir = true;
-		return OK;
+	if (!is_in_bundle(p_dir)) {
+		return DirAccessUnix::change_dir(p_dir);
 	}
-	return DirAccessUnix::change_dir(p_dir);
+	const String _dir = p_dir.trim_prefix(OS_OpenHarmony::get_singleton()->get_bundle_resource_dir());
+	if (!OH_ResourceManager_IsRawDir(OS_OpenHarmony::get_singleton()->get_native_resource_manager(), _dir.utf8().get_data())) {
+		return ERR_INVALID_PARAMETER;
+	}
+	list_dir_end();
+	current_dir = p_dir;
+	_is_rawdir = true;
+	return OK;
 }
 
 String DirAccessOpenHarmony::get_current_dir(bool p_include_drive) const {
@@ -143,31 +194,38 @@ Error DirAccessOpenHarmony::make_dir(String p_dir) {
 
 bool DirAccessOpenHarmony::file_exists(String p_file) {
 	p_file = get_absolute_path(p_file);
-	if (is_in_bundle(p_file)) {
-		p_file = p_file.trim_prefix(OS_OpenHarmony::get_singleton()->get_bundle_resource_dir());
-		String p_dir = p_file.get_base_dir();
-		String p_name = p_file.get_file();
-		if (OH_ResourceManager_IsRawDir(resource_manager, p_dir.utf8().get_data())) {
-			return false;
-		}
-		RawDir *rawdir = OH_ResourceManager_OpenRawDir(resource_manager, p_dir.utf8().get_data());
-		int count = OH_ResourceManager_GetRawFileCount(rawdir);
-		for (int i = 0; i < count; i++) {
-			String file_name = OH_ResourceManager_GetRawFileName(rawdir, i);
-			if (file_name == p_name) {
-				return !OH_ResourceManager_IsRawDir(resource_manager, p_file.utf8().get_data());
-			}
-		}
+	if (!is_in_bundle(p_file)) {
+		return DirAccessUnix::file_exists(p_file);
+	}
+	p_file = p_file.trim_prefix(OS_OpenHarmony::get_singleton()->get_bundle_resource_dir());
+	const CharString dir = p_file.get_base_dir().utf8();
+	NativeResourceManager *resource_manager = OS_OpenHarmony::get_singleton()->get_native_resource_manager();
+	if (!OH_ResourceManager_IsRawDir(resource_manager, dir.get_data())) {
 		return false;
 	}
-	return DirAccessUnix::file_exists(p_file);
+	RawDir *rawdir = OH_ResourceManager_OpenRawDir(resource_manager, dir.get_data());
+	if (!rawdir) {
+		return false;
+	}
+	int count = OH_ResourceManager_GetRawFileCount(rawdir);
+	bool found = false;
+	const String name = p_file.get_file();
+	for (int i = 0; i < count; i++) {
+		const char *file_name = OH_ResourceManager_GetRawFileName(rawdir, i);
+		if (String::utf8(file_name) == name) {
+			found = !OH_ResourceManager_IsRawDir(resource_manager, p_file.utf8().get_data());
+			break;
+		}
+	}
+	OH_ResourceManager_CloseRawDir(rawdir);
+	return found;
 }
 
 bool DirAccessOpenHarmony::dir_exists(String p_dir) {
 	p_dir = get_absolute_path(p_dir);
 	if (is_in_bundle(p_dir)) {
 		p_dir = p_dir.trim_prefix(OS_OpenHarmony::get_singleton()->get_bundle_resource_dir());
-		return OH_ResourceManager_IsRawDir(resource_manager, p_dir.utf8().get_data());
+		return OH_ResourceManager_IsRawDir(OS_OpenHarmony::get_singleton()->get_native_resource_manager(), p_dir.utf8().get_data());
 	}
 	return DirAccessUnix::dir_exists(p_dir);
 }
@@ -216,7 +274,6 @@ Error DirAccessOpenHarmony::remove(String p_path) {
 
 bool DirAccessOpenHarmony::is_link(String p_file) {
 	p_file = get_absolute_path(p_file);
-
 	if (is_in_bundle(p_file)) {
 		return false;
 	}

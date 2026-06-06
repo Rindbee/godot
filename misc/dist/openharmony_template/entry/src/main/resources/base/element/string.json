@@ -1,28 +1,124 @@
 {
   "string": [
     {
+      "name": "app_name",
+      "value": "godot"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "godot"
+    },
+    {
       "name": "module_desc",
       "value": "module description"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "description"
+      "value": "entry description"
     },
     {
-      "name": "EntryAbility_label",
-      "value": "label"
+      "name": "orientation",
+      "value": "unspecified"
     },
     {
       "name": "user_permissions",
       "value": ""
     },
     {
-      "name": "INTERNET_reason",
-      "value": "For accessing network"
+      "name": "ACCESS_BLUETOOTH_reason",
+      "value": "Used for pairing and connecting to Bluetooth devices."
+    },
+    {
+      "name": "ACCESS_NEARLINK_reason",
+      "value": "Used for pairing and connecting to NearLink devices."
+    },
+    {
+      "name": "ACTIVITY_MOTION_reason",
+      "value": "Used for accessing motion and fitness data."
+    },
+    {
+      "name": "APPROXIMATELY_LOCATION_reason",
+      "value": "Used for obtaining approximate location information."
+    },
+    {
+      "name": "APP_TRACKING_CONSENT_reason",
+      "value": "Used for cross-app tracking with user consent."
+    },
+    {
+      "name": "CAMERA_reason",
+      "value": "Used for taking photos and recording videos."
+    },
+    {
+      "name": "CUSTOM_SCREEN_CAPTURE_reason",
+      "value": "Used for custom screen recording."
+    },
+    {
+      "name": "DISTRIBUTED_DATASYNC_reason",
+      "value": "Used for synchronizing data across devices."
+    },
+    {
+      "name": "LOCATION_reason",
+      "value": "Used for obtaining precise location information."
+    },
+    {
+      "name": "LOCATION_IN_BACKGROUND_reason",
+      "value": "Used for location services when running in the background."
+    },
+    {
+      "name": "MEDIA_LOCATION_reason",
+      "value": "Used for accessing location information in media files."
     },
     {
       "name": "MICROPHONE_reason",
-      "value": "For recording audio"
+      "value": "Used for recording audio."
+    },
+    {
+      "name": "READ_AUDIO_reason",
+      "value": "Used for reading audio files."
+    },
+    {
+      "name": "READ_CALENDAR_reason",
+      "value": "Used for reading calendar events."
+    },
+    {
+      "name": "READ_HEALTH_DATA_reason",
+      "value": "Used for reading health and fitness data."
+    },
+    {
+      "name": "READ_IMAGEVIDEO_reason",
+      "value": "Used for reading images and videos from public directories."
+    },
+    {
+      "name": "READ_PASTEBOARD_reason",
+      "value": "Used for reading clipboard content."
+    },
+    {
+      "name": "READ_WRITE_DESKTOP_DIRECTORY_reason",
+      "value": "Used for reading and writing files on the desktop."
+    },
+    {
+      "name": "READ_WRITE_DOCUMENTS_DIRECTORY_reason",
+      "value": "Used for reading and writing files in the documents folder."
+    },
+    {
+      "name": "READ_WRITE_DOWNLOAD_DIRECTORY_reason",
+      "value": "Used for reading and writing files in the downloads folder."
+    },
+    {
+      "name": "SHORT_TERM_WRITE_IMAGEVIDEO_reason",
+      "value": "Used for temporarily saving images and videos."
+    },
+    {
+      "name": "WRITE_AUDIO_reason",
+      "value": "Used for writing audio files."
+    },
+    {
+      "name": "WRITE_CALENDAR_reason",
+      "value": "Used for writing calendar events."
+    },
+    {
+      "name": "WRITE_IMAGEVIDEO_reason",
+      "value": "Used for writing images and videos."
     }
   ]
 }

@@ -1,7 +1,6 @@
 {
-  "modelVersion": "5.0.5",
-  "dependencies": {
-  },
+  "modelVersion": "6.1.1",
+  "dependencies": {},
   "execution": {
     // "analyze": "normal",                     /* Define the build analyze mode. Value: [ "normal" | "advanced" | false ]. Default: "normal" */
     // "daemon": true,                          /* Enable daemon compilation. Value: [ true | false ]. Default: true */
@@ -18,5 +17,8 @@
   "nodeOptions": {
     // "maxOldSpaceSize": 8192                  /* Enable nodeOptions maxOldSpaceSize compilation. Unit M. Used for the daemon process. Default: 8192*/
     // "exposeGC": true                         /* Enable to trigger garbage collection explicitly. Default: true*/
+  },
+  "properties": {
+    "ohos.pack.compressLevel": "standard"
   }
 }
