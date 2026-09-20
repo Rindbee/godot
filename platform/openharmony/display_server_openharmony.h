@@ -30,16 +30,34 @@
 
 #pragma once
 
-#include "core/input/input_event.h"
 #include "servers/display/display_server.h"
-#include "servers/rendering/rendering_device.h"
 
-#include <ace/xcomponent/native_interface_xcomponent.h>
-#include <arkui/native_node.h>
-#include <inputmethod/inputmethod_inputmethod_proxy_capi.h>
-#include <inputmethod/inputmethod_text_editor_proxy_capi.h>
-#include <multimodalinput/oh_input_manager.h>
+#include <inputmethod/inputmethod_types_capi.h>
 #include <window_manager/oh_display_info.h>
+
+class InputEvent;
+class InputEventMouse;
+class InputEventWithModifiers;
+
+#ifdef GLES3_ENABLED
+class EGLManager;
+#endif // GLES3_ENABLED
+#ifdef RD_ENABLED
+class RenderingDevice;
+class RenderingContextDriver;
+#endif // RD_ENABLED
+
+struct NativeWindow;
+struct OH_ArkUI_SurfaceHolder;
+struct ArkUI_Node;
+struct ArkUI_NodeEvent;
+struct ArkUI_UIInputEvent;
+struct Input_CustomCursor;
+struct InputMethod_TextEditorProxy;
+struct InputMethod_AttachOptions;
+struct InputMethod_InputMethodProxy;
+struct InputMethod_TextConfig;
+struct InputMethod_PrivateCommand;
 
 class DisplayServerOpenHarmony : public DisplayServer {
 	GDSOFTCLASS(DisplayServerOpenHarmony, DisplayServer);
@@ -51,8 +69,13 @@ private:
 	uint64_t last_click_ms = 0;
 
 	String rendering_driver;
+#ifdef GLES3_ENABLED
+	EGLManager *egl_manager = nullptr;
+#endif // GLES3_ENABLED
+#ifdef RD_ENABLED
 	RenderingContextDriver *rendering_context = nullptr;
 	RenderingDevice *rendering_device = nullptr;
+#endif // RD_ENABLED
 	ObjectID window_attached_instance_id;
 
 	void _window_callback(const Callable &p_callable, const Variant &p_arg, bool p_deferred = false) const;
@@ -279,6 +302,9 @@ private:
 	static void available_area_change_callback(uint64_t p_display_id);
 	static void fold_display_mode_change_callback(NativeDisplayManager_FoldDisplayMode p_display_mode);
 
+	void _register_screen_listeners();
+	void _unregister_screen_listeners();
+
 public:
 	static DisplayServerOpenHarmony *get_singleton();
 	static DisplayServer *create_func(const String &p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window, Error &r_error);
@@ -365,8 +391,13 @@ public:
 	virtual void delete_sub_window(DisplayServerEnums::WindowID p_window) override;
 
 	virtual DisplayServerEnums::WindowID get_window_at_screen_position(const Point2i &p_position) const override;
+
+	virtual int64_t window_get_native_handle(DisplayServerEnums::HandleType p_handle_type, DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) const override;
+
 	virtual void window_attach_instance_id(ObjectID p_instance, DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) override;
 	virtual ObjectID window_get_attached_instance_id(DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) const override;
+	virtual void gl_window_make_current(DisplayServerEnums::WindowID p_window_id) override;
+
 	virtual void window_set_window_event_callback(const Callable &p_callable, DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) override;
 	virtual void window_set_input_event_callback(const Callable &p_callable, DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) override;
 	virtual void window_set_input_text_callback(const Callable &p_callable, DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) override;
@@ -414,4 +445,7 @@ public:
 	virtual bool window_can_draw(DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) const override;
 	virtual bool can_any_window_draw() const override;
 	virtual void process_events() override;
+
+	virtual void release_rendering_thread() override;
+	virtual void swap_buffers() override;
 };

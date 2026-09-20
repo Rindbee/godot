@@ -4,7 +4,7 @@ import json
 import os
 import sys
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from methods import print_error, print_info, print_warning
 from platform_methods import validate_arch
@@ -57,7 +57,6 @@ def get_flags():
         "arch": "arm64",
         "target": "template_debug",
         "builtin_pcre2_with_jit": False,
-        "opengl3": False,
         "library_type": "shared_library",
         "supported": ["library"],
     }
@@ -103,8 +102,8 @@ class ModuleConfig:
     name: str
     min_api: int
     required: bool
-    libname: Optional[str]
-    define: Optional[str]
+    libname: str | None
+    define: str | None
     enable: bool
 
     def is_compatible(self, api_version: int) -> bool:
@@ -219,7 +218,15 @@ def configure(env: SConsEnvironment):
 
     env.Append(CCFLAGS=["-fPIC", "-fvisibility=hidden"])
 
-    env.Append(CPPDEFINES=["OPENHARMONY_ENABLED", "UNIX_ENABLED", "__OPEN_HARMONY__", "MBEDTLS_NO_UDBL_DIVISION"])
+    env.Append(
+        CPPDEFINES=[
+            "OPENHARMONY_ENABLED",
+            "UNIX_ENABLED",
+            "__OPEN_HARMONY__",
+            "MBEDTLS_NO_UDBL_DIVISION",
+            "OHOS_PLATFORM",
+        ]
+    )
 
     env.Append(LINKFLAGS=["-fuse-ld=lld"])
     env.Append(LINKFLAGS=["-Wl,--build-id"])
@@ -273,7 +280,6 @@ def configure(env: SConsEnvironment):
             env.Append(LIBS=["vulkan"])
 
     if env["opengl3"]:
-        print_error("opengl3 is not support on OpenHarmony")
-        sys.exit(255)
+        env.Append(CPPDEFINES=["GLES3_ENABLED"])
 
     print_info(f"The minimum compatible API version for this build is {min_comp_api_level}.")

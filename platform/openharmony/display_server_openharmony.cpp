@@ -34,7 +34,6 @@
 #include "napi_bridge.h"
 #include "os_openharmony.h"
 #include "pixelmap_driver.h"
-#include "rendering_context_driver_vulkan_openharmony.h"
 
 #include "core/config/project_settings.h"
 #include "core/input/input.h"
@@ -42,11 +41,27 @@
 #include "core/object/callable_mp.h"
 #include "main/main.h"
 #include "servers/display/native_menu.h"
-#include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
 
+#ifdef RD_ENABLED
+#include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
+#ifdef VULKAN_ENABLED
+#include "rendering_context_driver_vulkan_openharmony.h"
+#endif // VULKAN_ENABLED
+#endif // RD_ENABLED
+
+#ifdef GLES3_ENABLED
+#include "egl_manager_openharmony.h"
+#include "egl_manager_openharmony_gles.h"
+
+#include "drivers/gles3/rasterizer_gles3.h"
+#endif // GLES3_ENABLED
+
+#include <ace/xcomponent/native_interface_xcomponent.h>
 #include <arkui/native_key_event.h>
+#include <arkui/native_node.h>
 #include <database/pasteboard/oh_pasteboard.h>
 #include <inputmethod/inputmethod_controller_capi.h>
+#include <multimodalinput/oh_input_manager.h>
 #include <window_manager/oh_display_capture.h>
 #include <window_manager/oh_display_manager.h>
 namespace OpenHarmony {
@@ -115,7 +130,13 @@ void DisplayServerOpenHarmony::_update_window_rect(const Rect2i &p_rect, Display
 	if (wd.visible && rendering_context) {
 		rendering_context->window_set_size(p_window, wd.rect.size.width, wd.rect.size.height);
 	}
-#endif
+#endif // RD_ENABLED
+
+	// #ifdef GLES3_ENABLED
+	// 	if (egl_manager) {
+	// 		egl_manager->window_resize(p_window, wd.rect.size.width, wd.rect.size.height);
+	// 	}
+	// #endif // GLES3_ENABLED
 
 	if (wd.rect_changed_callback.is_valid()) {
 		wd.rect_changed_callback.call(wd.rect);
@@ -456,16 +477,29 @@ DisplayServerOpenHarmony *DisplayServerOpenHarmony::get_singleton() {
 
 Vector<String> DisplayServerOpenHarmony::get_rendering_drivers_func() {
 	Vector<String> drivers;
+#ifdef GLES3_ENABLED
+	drivers.push_back("opengl3");
+	drivers.push_back("opengl3_es");
+#endif
+#ifdef VULKAN_ENABLED
 	drivers.push_back("vulkan");
+#endif
 	return drivers;
 }
 
 DisplayServer *DisplayServerOpenHarmony::create_func(const String &p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window, Error &r_error) {
 	DisplayServer *ds = memnew(DisplayServerOpenHarmony(p_rendering_driver, p_mode, p_vsync_mode, p_flags, p_position, p_resolution, p_screen, p_context, p_parent_window, r_error));
 	if (r_error != OK) {
-		OS::get_singleton()->alert(
-				"Your device seems not to support the required Vulkan version.\n\n"
-				"Unable to initialize Vulkan video driver.");
+		if (p_rendering_driver == "vulkan") {
+			OS::get_singleton()->alert(
+					"Your device seems not to support the required Vulkan version.\n\n"
+					"Please try exporting your game using the 'gl_compatibility' renderer.",
+					"Unable to initialize Vulkan video driver");
+		} else {
+			OS::get_singleton()->alert(
+					"Your device seems not to support the required OpenGL ES 3.0 version.",
+					"Unable to initialize OpenGL video driver");
+		}
 	}
 	return ds;
 }
@@ -479,42 +513,8 @@ DisplayServerOpenHarmony::DisplayServerOpenHarmony(const String &p_rendering_dri
 
 	native_menu = memnew(NativeMenu);
 
-	{
-		NativeDisplayManager_ErrorCode err = OH_NativeDisplayManager_RegisterDisplayAddListener(display_add_or_change_callback, &screen_add_listener_idx);
-		if (err != DISPLAY_MANAGER_OK) {
-			ERR_PRINT(vformat("Failed to register display add listener, error: %d.", err));
-		}
-
-		err = OH_NativeDisplayManager_RegisterDisplayChangeListener(display_add_or_change_callback, &screen_change_listener_idx);
-		if (err != DISPLAY_MANAGER_OK) {
-			ERR_PRINT(vformat("Failed to register display change listener, error: %d.", err));
-		}
-
-		err = OH_NativeDisplayManager_RegisterDisplayRemoveListener(display_remove_callback, &screen_remove_listener_idx);
-		if (err != DISPLAY_MANAGER_OK) {
-			ERR_PRINT(vformat("Failed to register display remove listener, error: %d.", err));
-		}
-
-		err = OH_NativeDisplayManager_RegisterAvailableAreaChangeListener(available_area_change_callback, &available_area_change_listener_idx);
-		if (err != DISPLAY_MANAGER_OK) {
-			ERR_PRINT(vformat("Failed to register available area change listener, error: %d.", err));
-		}
-
-		foldable = OH_NativeDisplayManager_IsFoldable();
-
-		if (foldable) {
-			err = OH_NativeDisplayManager_RegisterFoldDisplayModeChangeListener(fold_display_mode_change_callback, &fold_display_mode_change_listener_idx);
-			if (err != DISPLAY_MANAGER_OK) {
-				ERR_PRINT(vformat("Failed to register fold display mode change listener, error: %d.", err));
-			}
-
-			NativeDisplayManager_FoldDisplayMode native_fold_display_mode;
-			OH_NativeDisplayManager_GetFoldDisplayMode(&native_fold_display_mode);
-			fold_display_mode = (FoldDisplayMode)native_fold_display_mode;
-		}
-
-		_update_all_screen_info();
-	}
+	_register_screen_listeners();
+	_update_all_screen_info();
 
 	context = p_context;
 
@@ -540,16 +540,83 @@ DisplayServerOpenHarmony::DisplayServerOpenHarmony(const String &p_rendering_dri
 			ERR_PRINT(vformat("Failed to initialize %s context.", rendering_driver));
 			memdelete(rendering_context);
 			rendering_context = nullptr;
-			r_error = ERR_CANT_CREATE;
-			ERR_FAIL_MSG("Could not initialize " + rendering_driver);
+#ifdef GLES3_ENABLED
+			bool fallback_to_opengl3 = GLOBAL_GET("rendering/rendering_device/fallback_to_opengl3");
+			if (fallback_to_opengl3 && rendering_driver != "opengl3") {
+				WARN_PRINT("Your video card drivers seem not to support the required Vulkan version, switching to OpenGL 3.");
+				rendering_driver = "opengl3";
+				OS::get_singleton()->set_current_rendering_method("gl_compatibility", OS::RENDERING_SOURCE_FALLBACK);
+				OS::get_singleton()->set_current_rendering_driver_name(rendering_driver, OS::RENDERING_SOURCE_FALLBACK);
+			} else
+#endif // GLES3_ENABLED
+			{
+				r_error = ERR_CANT_CREATE;
+				ERR_FAIL_MSG(vformat("Could not initialize %s", rendering_driver));
+			}
 		}
 		driver_found = true;
 	}
 #endif // RD_ENABLED
 
+#ifdef GLES3_ENABLED
+	if (rendering_driver == "opengl3") {
+		egl_manager = memnew(EGLManagerOpenHarmony);
+
+		if (egl_manager->initialize() != OK || egl_manager->open_display(nullptr) != OK) {
+			memdelete(egl_manager);
+			egl_manager = nullptr;
+
+			bool fallback = GLOBAL_GET("rendering/gl_compatibility/fallback_to_gles");
+			if (fallback) {
+				WARN_PRINT("Your video card drivers seem not to support the required OpenGL version, switching to OpenGLES.");
+				rendering_driver = "opengl3_es";
+				OS::get_singleton()->set_current_rendering_driver_name(rendering_driver, OS::RENDERING_SOURCE_FALLBACK);
+			} else {
+				r_error = ERR_UNAVAILABLE;
+
+				OS::get_singleton()->alert(
+						vformat("Your video card drivers seem not to support the required OpenGL 4.2 version.\n\n"
+								"If possible, consider updating your video card drivers or using the Vulkan driver.\n\n"
+								"You can enable the Vulkan driver by starting the engine from the\n"
+								"command line with the command:\n\n     --rendering-driver vulkan\n\n"
+								"If you recently updated your video card drivers, try rebooting."),
+						"Unable to initialize OpenGL video driver");
+
+				ERR_FAIL_MSG("Could not initialize OpenGL.");
+			}
+		} else {
+			RasterizerGLES3::make_current(true);
+			driver_found = true;
+		}
+	}
+
+	if (rendering_driver == "opengl3_es") {
+		egl_manager = memnew(EGLManagerOpenHarmonyGLES);
+
+		if (egl_manager->initialize() != OK || egl_manager->open_display(nullptr) != OK) {
+			memdelete(egl_manager);
+			egl_manager = nullptr;
+			r_error = ERR_CANT_CREATE;
+
+			OS::get_singleton()->alert(
+					vformat("Your video card drivers seem not to support the required OpenGL ES 3.2 version.\n\n"
+							"If possible, consider updating your video card drivers or using the Vulkan driver.\n\n"
+							"You can enable the Vulkan driver by starting the engine from the\n"
+							"command line with the command:\n\n     --rendering-driver vulkan\n\n"
+							"If you recently updated your video card drivers, try rebooting."),
+					"Unable to initialize OpenGL ES video driver");
+
+			ERR_FAIL_MSG("Could not initialize OpenGL ES.");
+		}
+
+		RasterizerGLES3::make_current(false);
+		driver_found = true;
+	}
+#endif // GLES3_ENABLED
+
 	if (!driver_found) {
 		r_error = ERR_UNAVAILABLE;
-		ERR_FAIL_MSG("Video driver not found.");
+		ERR_FAIL_MSG(vformat("Video driver %s not found.", rendering_driver));
 	}
 
 	WindowData &wd = windows[DisplayServerEnums::MAIN_WINDOW_ID];
@@ -640,34 +707,7 @@ DisplayServerOpenHarmony::~DisplayServerOpenHarmony() {
 
 	virtual_keyboard_hide();
 
-	{
-		NativeDisplayManager_ErrorCode err = OH_NativeDisplayManager_UnregisterDisplayAddListener(screen_add_listener_idx);
-		if (err != DISPLAY_MANAGER_OK) {
-			ERR_PRINT(vformat("Failed to unregister display add listener, error: %d.", err));
-		}
-
-		err = OH_NativeDisplayManager_UnregisterDisplayChangeListener(screen_change_listener_idx);
-		if (err != DISPLAY_MANAGER_OK) {
-			ERR_PRINT(vformat("Failed to unregister display change listener, error: %d.", err));
-		}
-
-		err = OH_NativeDisplayManager_UnregisterDisplayRemoveListener(screen_remove_listener_idx);
-		if (err != DISPLAY_MANAGER_OK) {
-			ERR_PRINT(vformat("Failed to unregister display remove listener, error: %d.", err));
-		}
-
-		err = OH_NativeDisplayManager_UnregisterAvailableAreaChangeListener(available_area_change_listener_idx);
-		if (err != DISPLAY_MANAGER_OK) {
-			ERR_PRINT(vformat("Failed to unregister available area change listener, error: %d.", err));
-		}
-
-		if (foldable) {
-			err = OH_NativeDisplayManager_UnregisterFoldDisplayModeChangeListener(fold_display_mode_change_listener_idx);
-			if (err != DISPLAY_MANAGER_OK) {
-				ERR_PRINT(vformat("Failed to unregister fold display mode change listener, error: %d.", err));
-			}
-		}
-	}
+	_unregister_screen_listeners();
 }
 
 void DisplayServerOpenHarmony::_window_callback(const Callable &p_callable, const Variant &p_arg, bool p_deferred) const {
@@ -839,6 +879,70 @@ void DisplayServerOpenHarmony::available_area_change_callback(uint64_t p_display
 
 void DisplayServerOpenHarmony::fold_display_mode_change_callback(NativeDisplayManager_FoldDisplayMode p_display_mode) {
 	get_singleton()->fold_display_mode = (FoldDisplayMode)p_display_mode;
+}
+
+void DisplayServerOpenHarmony::_register_screen_listeners() {
+	NativeDisplayManager_ErrorCode err = OH_NativeDisplayManager_RegisterDisplayAddListener(display_add_or_change_callback, &screen_add_listener_idx);
+	if (err != DISPLAY_MANAGER_OK) {
+		ERR_PRINT(vformat("Failed to register display add listener, error: %d.", err));
+	}
+
+	err = OH_NativeDisplayManager_RegisterDisplayChangeListener(display_add_or_change_callback, &screen_change_listener_idx);
+	if (err != DISPLAY_MANAGER_OK) {
+		ERR_PRINT(vformat("Failed to register display change listener, error: %d.", err));
+	}
+
+	err = OH_NativeDisplayManager_RegisterDisplayRemoveListener(display_remove_callback, &screen_remove_listener_idx);
+	if (err != DISPLAY_MANAGER_OK) {
+		ERR_PRINT(vformat("Failed to register display remove listener, error: %d.", err));
+	}
+
+	err = OH_NativeDisplayManager_RegisterAvailableAreaChangeListener(available_area_change_callback, &available_area_change_listener_idx);
+	if (err != DISPLAY_MANAGER_OK) {
+		ERR_PRINT(vformat("Failed to register available area change listener, error: %d.", err));
+	}
+
+	foldable = OH_NativeDisplayManager_IsFoldable();
+
+	if (foldable) {
+		err = OH_NativeDisplayManager_RegisterFoldDisplayModeChangeListener(fold_display_mode_change_callback, &fold_display_mode_change_listener_idx);
+		if (err != DISPLAY_MANAGER_OK) {
+			ERR_PRINT(vformat("Failed to register fold display mode change listener, error: %d.", err));
+		}
+
+		NativeDisplayManager_FoldDisplayMode native_fold_display_mode;
+		OH_NativeDisplayManager_GetFoldDisplayMode(&native_fold_display_mode);
+		fold_display_mode = (FoldDisplayMode)native_fold_display_mode;
+	}
+}
+
+void DisplayServerOpenHarmony::_unregister_screen_listeners() {
+	NativeDisplayManager_ErrorCode err = OH_NativeDisplayManager_UnregisterDisplayAddListener(screen_add_listener_idx);
+	if (err != DISPLAY_MANAGER_OK) {
+		ERR_PRINT(vformat("Failed to unregister display add listener, error: %d.", err));
+	}
+
+	err = OH_NativeDisplayManager_UnregisterDisplayChangeListener(screen_change_listener_idx);
+	if (err != DISPLAY_MANAGER_OK) {
+		ERR_PRINT(vformat("Failed to unregister display change listener, error: %d.", err));
+	}
+
+	err = OH_NativeDisplayManager_UnregisterDisplayRemoveListener(screen_remove_listener_idx);
+	if (err != DISPLAY_MANAGER_OK) {
+		ERR_PRINT(vformat("Failed to unregister display remove listener, error: %d.", err));
+	}
+
+	err = OH_NativeDisplayManager_UnregisterAvailableAreaChangeListener(available_area_change_listener_idx);
+	if (err != DISPLAY_MANAGER_OK) {
+		ERR_PRINT(vformat("Failed to unregister available area change listener, error: %d.", err));
+	}
+
+	if (foldable) {
+		err = OH_NativeDisplayManager_UnregisterFoldDisplayModeChangeListener(fold_display_mode_change_listener_idx);
+		if (err != DISPLAY_MANAGER_OK) {
+			ERR_PRINT(vformat("Failed to unregister fold display mode change listener, error: %d.", err));
+		}
+	}
 }
 
 TypedArray<Rect2> DisplayServerOpenHarmony::get_display_cutouts(int p_screen) const {
@@ -1750,11 +1854,57 @@ void DisplayServerOpenHarmony::delete_sub_window(DisplayServerEnums::WindowID p_
 	}
 #endif // RD_ENABLED
 
+#ifdef GLES3_ENABLED
+	if (egl_manager) {
+		egl_manager->window_destroy(p_window);
+	}
+#endif // GLES3_ENABLED
+
 	windows.erase(p_window);
 }
 
 DisplayServerEnums::WindowID DisplayServerOpenHarmony::get_window_at_screen_position(const Point2i &p_position) const {
 	return DisplayServerEnums::MAIN_WINDOW_ID;
+}
+
+int64_t DisplayServerOpenHarmony::window_get_native_handle(DisplayServerEnums::HandleType p_handle_type, DisplayServerEnums::WindowID p_window) const {
+	ERR_FAIL_COND_V(p_window != DisplayServerEnums::MAIN_WINDOW_ID, 0);
+	switch (p_handle_type) {
+		case DisplayServerEnums::WINDOW_HANDLE: {
+			ERR_FAIL_COND_V_MSG(!windows.has(p_window), 0, vformat("The window %d does exist.", p_window));
+			return windows[p_window].native_window_id;
+		}
+		case DisplayServerEnums::WINDOW_VIEW: {
+			return 0; // Not supported.
+		}
+		case DisplayServerEnums::DISPLAY_HANDLE: {
+			// @todo Find a way to get native screen id.
+			return 0;
+		}
+#ifdef GLES3_ENABLED
+		case DisplayServerEnums::OPENGL_CONTEXT: {
+			if (egl_manager) {
+				return (int64_t)egl_manager->get_context(p_window);
+			}
+			return 0;
+		}
+		case DisplayServerEnums::EGL_DISPLAY: {
+			if (egl_manager) {
+				return (int64_t)egl_manager->get_display(p_window);
+			}
+			return 0;
+		}
+		case DisplayServerEnums::EGL_CONFIG: {
+			if (egl_manager) {
+				return (int64_t)egl_manager->get_config(p_window);
+			}
+			return 0;
+		}
+#endif // GLES3_ENABLED
+		default: {
+			return 0;
+		}
+	}
 }
 
 void DisplayServerOpenHarmony::window_attach_instance_id(ObjectID p_instance, DisplayServerEnums::WindowID p_window) {
@@ -1763,6 +1913,14 @@ void DisplayServerOpenHarmony::window_attach_instance_id(ObjectID p_instance, Di
 
 ObjectID DisplayServerOpenHarmony::window_get_attached_instance_id(DisplayServerEnums::WindowID p_window) const {
 	return window_attached_instance_id;
+}
+
+void DisplayServerOpenHarmony::gl_window_make_current(DisplayServerEnums::WindowID p_window_id) {
+#ifdef GLES3_ENABLED
+	if (egl_manager) {
+		egl_manager->window_make_current(p_window_id);
+	}
+#endif // GLES3_ENABLED
 }
 
 void DisplayServerOpenHarmony::window_set_window_event_callback(const Callable &p_callable, DisplayServerEnums::WindowID p_window) {
@@ -1874,19 +2032,32 @@ DisplayServerEnums::WindowMode DisplayServerOpenHarmony::window_get_mode(Display
 
 void DisplayServerOpenHarmony::window_set_vsync_mode(DisplayServerEnums::VSyncMode p_vsync_mode, DisplayServerEnums::WindowID p_window) {
 	ERR_FAIL_COND_MSG(!windows.has(p_window), vformat("The window %d does exist.", p_window));
-#ifdef VULKAN_ENABLED
+#ifdef RD_ENABLED
 	if (rendering_context) {
 		rendering_context->window_set_vsync_mode(p_window, p_vsync_mode);
 	}
-#endif // VULKAN_ENABLED
+#endif // RD_ENABLED
+
+#ifdef GLES3_ENABLED
+	if (egl_manager) {
+		egl_manager->set_use_vsync(p_vsync_mode != DisplayServerEnums::VSYNC_DISABLED);
+	}
+#endif // GLES3_ENABLED
 }
 
 DisplayServerEnums::VSyncMode DisplayServerOpenHarmony::window_get_vsync_mode(DisplayServerEnums::WindowID p_window) const {
-#ifdef VULKAN_ENABLED
+#ifdef RD_ENABLED
 	if (rendering_context) {
 		return rendering_context->window_get_vsync_mode(p_window);
 	}
-#endif // VULKAN_ENABLED
+#endif // RD_ENABLED
+
+#ifdef GLES3_ENABLED
+	if (egl_manager) {
+		return egl_manager->is_using_vsync() ? DisplayServerEnums::VSYNC_ENABLED : DisplayServerEnums::VSYNC_DISABLED;
+	}
+#endif // GLES3_ENABLED
+
 	return DisplayServerEnums::VSYNC_ENABLED;
 }
 
@@ -1954,7 +2125,7 @@ bool DisplayServerOpenHarmony::window_is_hdr_output_enabled(DisplayServerEnums::
 	if (rendering_context) {
 		return rendering_context->window_get_hdr_output_enabled(p_window);
 	}
-#endif
+#endif // RD_ENABLED
 	return false;
 }
 
@@ -1975,7 +2146,7 @@ float DisplayServerOpenHarmony::window_get_hdr_output_current_reference_luminanc
 	if (rendering_context) {
 		return rendering_context->window_get_hdr_output_reference_luminance(p_window);
 	}
-#endif
+#endif // RD_ENABLED
 	return 0.0f;
 }
 
@@ -1996,7 +2167,7 @@ float DisplayServerOpenHarmony::window_get_hdr_output_current_max_luminance(Disp
 	if (rendering_context) {
 		return rendering_context->window_get_hdr_output_max_luminance(p_window);
 	}
-#endif
+#endif // RD_ENABLED
 	return 0.0f;
 }
 
@@ -2034,4 +2205,20 @@ bool DisplayServerOpenHarmony::can_any_window_draw() const {
 
 void DisplayServerOpenHarmony::process_events() {
 	Input::get_singleton()->flush_buffered_events();
+}
+
+void DisplayServerOpenHarmony::release_rendering_thread() {
+#ifdef GLES3_ENABLED
+	if (egl_manager) {
+		egl_manager->release_current();
+	}
+#endif // GLES3_ENABLED
+}
+
+void DisplayServerOpenHarmony::swap_buffers() {
+#ifdef GLES3_ENABLED
+	if (egl_manager) {
+		egl_manager->swap_buffers();
+	}
+#endif // GLES3_ENABLED
 }
