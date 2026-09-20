@@ -169,18 +169,11 @@ TextureStorage::TextureStorage() {
 			tf.format = RD::DATA_FORMAT_D16_UNORM;
 			tf.width = 4;
 			tf.height = 4;
-			tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_UPDATE_BIT | RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+			tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT | RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 			tf.texture_type = RD::TEXTURE_TYPE_2D;
 
-			Vector<uint8_t> sv;
-			sv.resize(16 * 2);
-			uint16_t *ptr = (uint16_t *)sv.ptrw();
-			for (int i = 0; i < 16; i++) {
-				ptr[i] = Math::make_half_float(1.0f);
-			}
-
 			default_rd_textures[DEFAULT_RD_TEXTURE_DEPTH] = RD::get_singleton()->texture_create(tf, RD::TextureView());
-			RD::get_singleton()->texture_update(default_rd_textures[DEFAULT_RD_TEXTURE_DEPTH], 0, sv);
+			RD::get_singleton()->texture_clear(default_rd_textures[DEFAULT_RD_TEXTURE_DEPTH], Color(1.0, 1.0, 1.0, 1.0), 0, tf.mipmaps, 0, tf.array_layers);
 		}
 
 		memset(pv.ptrw(), 0, 16 * 4);
@@ -527,19 +520,12 @@ TextureStorage::TextureStorage() {
 		tformat.width = 4;
 		tformat.height = 4;
 		tformat.array_layers = 1;
-		tformat.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_UPDATE_BIT | RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		tformat.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT | RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 		tformat.texture_type = RD::TEXTURE_TYPE_2D_ARRAY;
-
-		Vector<uint8_t> sv;
-		sv.resize(16 * 2);
-		uint16_t *ptr = (uint16_t *)sv.ptrw();
-		for (int i = 0; i < 16; i++) {
-			ptr[i] = Math::make_half_float(1.0f);
-		}
 
 		{
 			default_rd_textures[DEFAULT_RD_TEXTURE_2D_ARRAY_DEPTH] = RD::get_singleton()->texture_create(tformat, RD::TextureView());
-			RD::get_singleton()->texture_update(default_rd_textures[DEFAULT_RD_TEXTURE_2D_ARRAY_DEPTH], 0, sv);
+			RD::get_singleton()->texture_clear(default_rd_textures[DEFAULT_RD_TEXTURE_2D_ARRAY_DEPTH], Color(1.0, 1.0, 1.0, 1.0), 0, tformat.mipmaps, 0, tformat.array_layers);
 		}
 	}
 
