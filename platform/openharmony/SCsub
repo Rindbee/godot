@@ -1,0 +1,13 @@
+#!/usr/bin/env python
+from misc.utility.scons_hints import *
+
+import platform_openharmony_builders
+
+Import("env")
+
+files = [Glob("*.cpp")]
+
+lib = env.add_shared_library("#bin/godot", files)
+
+if env["generate_bundle"]:
+    env.AlwaysBuild(env.CommandNoCache("generate_bundle", lib, env.Run(platform_openharmony_builders.generate_bundle)))

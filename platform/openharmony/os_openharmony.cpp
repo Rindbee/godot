@@ -1,0 +1,722 @@
+/**************************************************************************/
+/*  os_openharmony.cpp                                                    */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
+#include "os_openharmony.h"
+
+#include "dir_access_openharmony.h"
+#include "display_server_openharmony.h"
+#include "file_access_openharmony.h"
+#include "napi_bridge.h"
+
+#include "core/error/error_macros.h"
+#include "core/object/script_backtrace.h"
+#include "core/string/string_builder.h"
+#include "core/variant/variant.h"
+#include "main/main.h"
+#include "scene/main/scene_tree.h"
+
+#include <AbilityKit/ability_base/want.h>
+#include <AbilityKit/ability_runtime/application_context.h>
+#include <CryptoArchitectureKit/crypto_rand.h>
+#include <accesstoken/ability_access_control.h>
+#include <deviceinfo.h>
+#include <hilog/log.h>
+#include <native_drawing/drawing_text_font_descriptor.h>
+#include <native_drawing/drawing_text_typography.h>
+#include <rawfile/raw_file_manager.h>
+
+namespace OpenHarmony {
+#include <filemanagement/environment/oh_environment.h>
+} // namespace OpenHarmony
+
+#undef LOG_DOMAIN
+#undef LOG_TAG
+#define LOG_DOMAIN 0x3200
+#define LOG_TAG "LIB_GODOT"
+
+const char *OS_OpenHarmony::BUNDLE_RESOURCE_DIR = "/data/storage/el1/bundle/resources/rawfile/";
+const char *OS_OpenHarmony::USER_DATA_DIR = "/data/storage/el2/base/files/";
+
+void OpenHarmonyLogger::logv(const char *p_format, va_list p_list, bool p_err) {
+	if (!should_log(p_err)) {
+		return;
+	}
+
+	char buffer[4096];
+	vsnprintf(&buffer[0], sizeof(buffer) - 1, p_format, p_list);
+
+	if (p_err) {
+		OH_LOG_ERROR(LOG_APP, "%{public}s", &buffer[0]);
+	} else {
+		OH_LOG_INFO(LOG_APP, "%{public}s", &buffer[0]);
+	}
+}
+
+void OpenHarmonyLogger::log_error(const char *p_function, const char *p_file, int p_line, const char *p_code, const char *p_rationale, bool p_editor_notify, ErrorType p_type, const Vector<Ref<ScriptBacktrace>> &p_script_backtraces) {
+	if (!should_log(true)) {
+		return;
+	}
+
+	const LogLevel log_level = p_type == ERR_WARNING ? LOG_WARN : LOG_ERROR;
+	const char *err_type = error_type_string(p_type);
+	const char *err_details = p_rationale && *p_rationale ? p_rationale : p_code;
+	const char *err_type_indent_str = error_type_indent(p_type);
+	const int err_type_indent = strlen(err_type_indent_str);
+
+	StringBuilder back_trace;
+	for (const Ref<ScriptBacktrace> &backtrace : p_script_backtraces) {
+		if (backtrace.is_valid() && !backtrace->is_empty()) {
+			back_trace += "\n";
+			back_trace += backtrace->format(err_type_indent);
+		}
+	}
+
+	if (back_trace.num_strings_appended() == 0) {
+		OH_LOG_Print(LOG_APP, log_level, LOG_DOMAIN, LOG_TAG,
+				"%{public}s: %{public}s\n%{public}sat: %{public}s (%{public}s:%{public}i)",
+				err_type, err_details, err_type_indent_str, p_function, p_file, p_line);
+	} else {
+		OH_LOG_Print(LOG_APP, log_level, LOG_DOMAIN, LOG_TAG,
+				"%{public}s: %{public}s\n%{public}sat: %{public}s (%{public}s:%{public}i)%{public}s",
+				err_type, err_details, err_type_indent_str, p_function, p_file, p_line, back_trace.as_string().utf8().get_data());
+	}
+}
+
+OS_OpenHarmony *OS_OpenHarmony::get_singleton() {
+	return static_cast<OS_OpenHarmony *>(OS::get_singleton());
+}
+
+OS_OpenHarmony::OS_OpenHarmony() {
+	Vector<Logger *> loggers;
+	OpenHarmonyLogger *logger = memnew(OpenHarmonyLogger);
+	loggers.push_back(logger);
+	_set_logger(memnew(CompositeLogger(loggers)));
+
+	_detect_device_type();
+
+	AudioDriverManager::add_driver(&audio_driver);
+	DisplayServerOpenHarmony::register_openharmony_driver();
+}
+
+OS_OpenHarmony::~OS_OpenHarmony() {
+	if (resource_manager) {
+		OH_ResourceManager_ReleaseNativeResourceManager(resource_manager);
+		resource_manager = nullptr;
+	}
+
+	if (crypto_rand) {
+		OH_CryptoRand_Destroy(crypto_rand);
+		crypto_rand = nullptr;
+	}
+}
+
+void OS_OpenHarmony::initialize_core() {
+	OS_Unix::initialize_core();
+
+	FileAccess::make_default<FileAccessOpenHarmony>(FileAccess::ACCESS_FILESYSTEM);
+	DirAccess::make_default<DirAccessOpenHarmony>(DirAccess::ACCESS_FILESYSTEM);
+}
+
+void OS_OpenHarmony::initialize() {
+	initialize_core();
+}
+
+void OS_OpenHarmony::initialize_joypads() {}
+
+void OS_OpenHarmony::set_main_loop(MainLoop *p_main_loop) {
+	main_loop = p_main_loop;
+}
+
+MainLoop *OS_OpenHarmony::get_main_loop() const {
+	return main_loop;
+}
+
+void OS_OpenHarmony::delete_main_loop() {
+	if (!main_loop) {
+		return;
+	}
+	memdelete(main_loop);
+	main_loop = nullptr;
+}
+
+void OS_OpenHarmony::finalize() {
+	delete_main_loop();
+}
+
+bool OS_OpenHarmony::request_permission(const String &p_name) {
+	const CharString cs = p_name.utf8();
+	const char *perm = cs.get_data();
+
+	Permission &permission = requested_permissions[p_name];
+	if (permission.granted) {
+		return true; // Already granted.
+	}
+
+	if (permission.requesting) {
+		return false; // Currently being requested.
+	}
+
+	if (permission.try_count > 3) {
+		return false; // Multiple attempts have already been made in this session.
+	}
+
+	if (OH_AT_CheckSelfPermission(perm)) {
+		permission.granted = true;
+		return true; // Check whether it has already been granted in a previous session.
+	}
+
+	permission.requesting = true;
+	if (permission.try_count == 0) {
+		NAPIBridge::get_singleton()->request_permissions_from_user(&perm, 1);
+	} else {
+		NAPIBridge::get_singleton()->request_permissions_on_setting(&perm, 1);
+	}
+	return false;
+}
+
+bool OS_OpenHarmony::request_permissions() {
+	return false;
+}
+
+Vector<String> OS_OpenHarmony::get_granted_permissions() const {
+	Vector<String> granted_permissions;
+	for (const KeyValue<String, Permission> &KV : requested_permissions) {
+		if (!KV.value.granted) {
+			continue;
+		}
+		granted_permissions.push_back(KV.key);
+	}
+	return granted_permissions;
+}
+
+void OS_OpenHarmony::set_requested_permission(const String &p_name, bool p_granted) {
+	Permission &perm = requested_permissions[p_name];
+	perm.requesting = false;
+	perm.granted = p_granted;
+	if (p_granted) {
+		perm.try_count = 0;
+	} else {
+		perm.try_count++;
+	}
+}
+
+void OS_OpenHarmony::_detect_device_type() {
+	const String type = String::utf8(OH_GetDeviceType());
+	if (type == "2in1") {
+		device_type = DEVICE_TYPE_PC;
+	} else if (type == "tablet") {
+		device_type = DEVICE_TYPE_TABLET;
+	} else if (type == "phone") {
+		device_type = DEVICE_TYPE_MOBILE;
+	}
+}
+
+bool OS_OpenHarmony::_check_internal_feature_support(const String &p_feature) {
+	if (p_feature == "system_fonts") {
+		return true;
+	}
+	if (p_feature == "mobile") {
+		return device_type == DEVICE_TYPE_MOBILE;
+	}
+	if (p_feature == "tablet") {
+		return device_type == DEVICE_TYPE_TABLET;
+	}
+	if (p_feature == "pc") {
+		return device_type == DEVICE_TYPE_PC;
+	}
+	return false;
+}
+
+String OS_OpenHarmony::get_name() const {
+	return "OpenHarmony";
+}
+
+String OS_OpenHarmony::get_distribution_name() const {
+	static String ret;
+	if (ret.is_empty()) {
+		ret = String::utf8(OH_GetDistributionOSName());
+	}
+	return ret;
+}
+
+String OS_OpenHarmony::get_version() const {
+	static String ret;
+	if (ret.is_empty()) {
+		ret = String::utf8(OH_GetDistributionOSVersion());
+	}
+	return ret;
+}
+
+String OS_OpenHarmony::get_model_name() const {
+	static String ret;
+	if (ret.is_empty()) {
+		ret = String::utf8(OH_GetProductModel());
+	}
+	return ret;
+}
+
+String OS_OpenHarmony::get_bundle_resource_dir() const {
+	static String ret;
+	if (ret.is_empty()) {
+		int32_t length = 0;
+		char buffer[PATH_MAX];
+		AbilityRuntime_ErrorCode error_code = OH_AbilityRuntime_ApplicationContextGetBundleCodeDir(buffer, PATH_MAX, &length);
+		if (error_code == ABILITY_RUNTIME_ERROR_CODE_NO_ERROR) {
+			ret = String::utf8(buffer, length).path_join("resources/rawfile/");
+		} else {
+			ret = "/data/storage/el1/bundle/resources/rawfile/";
+		}
+	}
+	return ret;
+}
+
+String OS_OpenHarmony::get_cache_path() const {
+	static String ret;
+	if (ret.is_empty()) {
+		int32_t length = 0;
+		char buffer[PATH_MAX];
+		AbilityRuntime_ErrorCode error_code = OH_AbilityRuntime_ApplicationContextGetCacheDir(buffer, PATH_MAX, &length);
+		if (error_code == ABILITY_RUNTIME_ERROR_CODE_NO_ERROR) {
+			ret.append_utf8(buffer, length);
+		} else {
+			ret = "/data/storage/el2/base/cache";
+		}
+	}
+	return ret;
+}
+
+String OS_OpenHarmony::get_config_path() const {
+	return OS::get_user_data_dir().path_join("config");
+}
+
+String OS_OpenHarmony::get_data_path() const {
+	static String ret;
+	if (ret.is_empty()) {
+		int32_t length = 0;
+		char buffer[PATH_MAX];
+		AbilityRuntime_ErrorCode error_code = OH_AbilityRuntime_ApplicationContextGetFilesDir(buffer, PATH_MAX, &length);
+		if (error_code == ABILITY_RUNTIME_ERROR_CODE_NO_ERROR) {
+			ret.append_utf8(buffer, length);
+		} else {
+			ret = "/data/storage/el2/base/files";
+		}
+	}
+	return ret;
+}
+
+String OS_OpenHarmony::get_temp_path() const {
+	static String ret;
+	if (ret.is_empty()) {
+		int32_t length = 0;
+		char buffer[PATH_MAX];
+		AbilityRuntime_ErrorCode error_code = OH_AbilityRuntime_ApplicationContextGetTempDir(buffer, PATH_MAX, &length);
+		if (error_code == ABILITY_RUNTIME_ERROR_CODE_NO_ERROR) {
+			ret.append_utf8(buffer, length);
+		} else {
+			ret = "/data/storage/el2/base/temp";
+		}
+	}
+	return ret;
+}
+
+String OS_OpenHarmony::get_system_dir(SystemDir p_dir, bool p_shared_storage) const {
+	bool success = false;
+	char *path = nullptr;
+	switch (p_dir) {
+		case OS::SYSTEM_DIR_DESKTOP: {
+			const String permission = "ohos.permission.READ_WRITE_DESKTOP_DIRECTORY";
+			if (!get_singleton()->request_permission(permission)) {
+				return String();
+			}
+			success = OpenHarmony::OH_Environment_GetUserDesktopDir(&path) == OpenHarmony::ERR_OK;
+		} break;
+		case OS::SYSTEM_DIR_DOCUMENTS: {
+			const String permission = "ohos.permission.READ_WRITE_DOCUMENTS_DIRECTORY";
+			if (!get_singleton()->request_permission(permission)) {
+				return String();
+			}
+			success = OpenHarmony::OH_Environment_GetUserDocumentDir(&path) == OpenHarmony::ERR_OK;
+		} break;
+		case OS::SYSTEM_DIR_DOWNLOADS: {
+			const String permission = "ohos.permission.READ_WRITE_DOWNLOAD_DIRECTORY";
+			if (!get_singleton()->request_permission(permission)) {
+				return String();
+			}
+			success = OpenHarmony::OH_Environment_GetUserDownloadDir(&path) == OpenHarmony::ERR_OK;
+		} break;
+		default: {
+			ERR_FAIL_V_MSG(String(), vformat("The current build does not support access to system directories of this type: %d.", p_dir));
+		} break;
+	}
+	String result;
+	if (success && path) {
+		result.append_utf8(path);
+		free(path);
+	}
+	return result;
+}
+
+void OS_OpenHarmony::_load_system_font_config() const {
+	font_config_loaded = false;
+	font_aliases.clear();
+	fonts.clear();
+	font_names.clear();
+
+	OH_Drawing_FontConfigInfoErrorCode error_code;
+	OH_Drawing_FontConfigInfo *font_config_info = OH_Drawing_GetSystemFontConfigInfo(&error_code);
+	ERR_FAIL_COND_MSG(error_code != SUCCESS_FONT_CONFIG_INFO, vformat("Failed to load system font config: %d.", error_code));
+
+	HashSet<String> generic_font_names;
+	for (size_t i = 0; i < font_config_info->fontGenericInfoSize; i++) {
+		OH_Drawing_FontGenericInfo &info = font_config_info->fontGenericInfoSet[i];
+		String font_name = String(info.familyName).to_lower();
+		generic_font_names.insert(font_name);
+		for (size_t j = 0; j < info.aliasInfoSize; j++) {
+			String alias_name = String(info.aliasInfoSet[j].familyName).to_lower();
+			font_aliases[alias_name] = font_name;
+			generic_font_names.insert(alias_name);
+		}
+	}
+
+	HashMap<String, Vector<String>> font_languages;
+	for (size_t i = 0; i < font_config_info->fallbackGroupSize; i++) {
+		OH_Drawing_FontFallbackGroup &group = font_config_info->fallbackGroupSet[i];
+		for (size_t j = 0; j < group.fallbackInfoSize; j++) {
+			OH_Drawing_FontFallbackInfo &info = group.fallbackInfoSet[j];
+			font_languages[String(info.familyName).to_lower()].push_back(info.language);
+		}
+	}
+	OH_Drawing_DestroySystemFontConfigInfo(font_config_info);
+
+	OH_Drawing_Array *names = OH_Drawing_GetSystemFontFullNamesByType(OH_Drawing_SystemFontType::GENERIC);
+	for (size_t i = 0;; i++) {
+		const OH_Drawing_String *name = OH_Drawing_GetSystemFontFullNameByIndex(names, i);
+		if (!name) {
+			break;
+		}
+		OH_Drawing_FontDescriptor *descriptor = OH_Drawing_GetFontDescriptorByFullName(name, OH_Drawing_SystemFontType::GENERIC);
+		String font_name = String(descriptor->fontFamily).to_lower();
+		FontInfo fi;
+		if (!generic_font_names.has(font_name)) {
+			fi.priority = 2;
+		}
+		if (font_name.ends_with("-condensed")) {
+			font_name = font_name.trim_suffix("-condensed");
+			fi.stretch = 75;
+			fi.font_name = font_name;
+		} else {
+			fi.font_name = font_name;
+		}
+		fi.weight = descriptor->weight;
+		fi.italic = descriptor->italic;
+		fi.path = String(descriptor->path);
+
+		OH_Drawing_DestroyFontDescriptor(descriptor);
+		descriptor = nullptr;
+
+		Vector<String> lang_codes = font_languages[font_name];
+		if (lang_codes.is_empty()) {
+			fi.lang.insert("en");
+		} else {
+			for (int i = 0; i < lang_codes.size(); i++) {
+				Vector<String> lang_code_elements = lang_codes[i].split("-");
+				if (lang_code_elements.size() >= 1 && lang_code_elements[0] != "und") {
+					// Add missing script codes.
+					if (lang_code_elements[0] == "ko") {
+						fi.script.insert("Hani");
+						fi.script.insert("Hang");
+					}
+					if (lang_code_elements[0] == "ja") {
+						fi.script.insert("Hani");
+						fi.script.insert("Kana");
+						fi.script.insert("Hira");
+					}
+					if (!lang_code_elements[0].is_empty()) {
+						fi.lang.insert(lang_code_elements[0]);
+					}
+				}
+				if (lang_code_elements.size() >= 2) {
+					// Add common codes for variants and remove variants not supported by HarfBuzz/ICU.
+					if (lang_code_elements[1] == "Aran") {
+						fi.script.insert("Arab");
+					}
+					if (lang_code_elements[1] == "Cyrs") {
+						fi.script.insert("Cyrl");
+					}
+					if (lang_code_elements[1] == "Hanb") {
+						fi.script.insert("Hani");
+						fi.script.insert("Bopo");
+					}
+					if (lang_code_elements[1] == "Hans" || lang_code_elements[1] == "Hant") {
+						fi.script.insert("Hani");
+					}
+					if (lang_code_elements[1] == "Syrj" || lang_code_elements[1] == "Syre" || lang_code_elements[1] == "Syrn") {
+						fi.script.insert("Syrc");
+					}
+					if (!lang_code_elements[1].is_empty() && lang_code_elements[1] != "Zsym" && lang_code_elements[1] != "Zsye" && lang_code_elements[1] != "Zmth") {
+						fi.script.insert(lang_code_elements[1]);
+					}
+				}
+			}
+		}
+
+		fonts.push_back(fi);
+		font_names.insert(font_name);
+	}
+	OH_Drawing_DestroySystemFontFullNames(names);
+	font_config_loaded = true;
+}
+
+Vector<String> OS_OpenHarmony::get_system_fonts() const {
+	if (!font_config_loaded) {
+		_load_system_font_config();
+	}
+	Vector<String> ret;
+	for (const String &E : font_names) {
+		ret.push_back(E);
+	}
+	return ret;
+}
+
+String OS_OpenHarmony::get_system_font_path(const String &p_font_name, int p_weight, int p_stretch, bool p_italic) const {
+	if (!font_config_loaded) {
+		_load_system_font_config();
+	}
+	String font_name = p_font_name.to_lower();
+	if (font_aliases.has(font_name)) {
+		font_name = font_aliases[font_name];
+	}
+
+	String best_path;
+	int best_score = 0;
+
+	for (const FontInfo &F : fonts) {
+		int score = 0;
+		if (F.font_name == font_name) {
+			score += (65 - F.priority);
+		}
+		score += (20 - Math::abs(F.weight - p_weight) / 50);
+		score += (20 - Math::abs(F.stretch - p_stretch) / 10);
+
+		if (F.italic == p_italic) {
+			score += 30;
+		}
+
+		if (score >= 60 && score > best_score) {
+			best_score = score;
+			best_path = F.path;
+
+			if (score >= 140) {
+				break;
+			}
+		}
+	}
+
+	return best_path;
+}
+
+Vector<String> OS_OpenHarmony::get_system_font_path_for_text(const String &p_font_name, const String &p_text, const String &p_locale, const String &p_script, int p_weight, int p_stretch, bool p_italic) const {
+	if (!font_config_loaded) {
+		_load_system_font_config();
+	}
+	String font_name = p_font_name.to_lower();
+	if (font_aliases.has(font_name)) {
+		font_name = font_aliases[font_name];
+	}
+	String lang_prefix = p_locale.get_slicec('_', 0);
+	Vector<String> ret;
+	int best_score = 0;
+	for (const List<FontInfo>::Element *E = fonts.front(); E; E = E->next()) {
+		int score = 0;
+		if (!E->get().script.is_empty() && !p_script.is_empty() && !E->get().script.has(p_script)) {
+			continue;
+		}
+		float sim = E->get().font_name.similarity(font_name);
+		if (sim > 0.0) {
+			score += (60 * sim + 5 - E->get().priority);
+		}
+		if (E->get().lang.has(p_locale)) {
+			score += 120;
+		} else if (E->get().lang.has(lang_prefix)) {
+			score += 115;
+		}
+		if (E->get().script.has(p_script)) {
+			score += 240;
+		}
+		score += (20 - Math::abs(E->get().weight - p_weight) / 50);
+		score += (20 - Math::abs(E->get().stretch - p_stretch) / 10);
+		if (E->get().italic == p_italic) {
+			score += 30;
+		}
+		if (score > best_score) {
+			best_score = score;
+			if (!ret.has(E->get().path)) {
+				ret.insert(0, E->get().path);
+			}
+		} else if (score == best_score || E->get().script.is_empty()) {
+			if (!ret.has(E->get().path)) {
+				ret.push_back(E->get().path);
+			}
+		}
+		if (score >= 490) {
+			break; // Perfect match.
+		}
+	}
+
+	return ret;
+}
+
+String OS_OpenHarmony::get_executable_path() const {
+	return "template";
+}
+
+Error OS_OpenHarmony::create_instance(const List<String> &p_arguments, ProcessID *r_child_id) {
+	ERR_FAIL_COND_V(device_type == DEVICE_TYPE_UNKNOWN, ERR_CANT_CREATE);
+
+	StringBuilder sb;
+	String project_id;
+	bool path_found = false;
+	bool first = true;
+	for (const String &arg : p_arguments) {
+		if (!first) {
+			sb += "\n";
+		}
+		sb += arg;
+		first = false;
+
+		if (path_found) {
+			// Use the project path as a unique identifier.
+			project_id = arg;
+			path_found = false;
+		}
+		if (arg == "--path") {
+			path_found = true;
+		}
+	}
+
+	if (device_type == DEVICE_TYPE_MOBILE) {
+		if (NAPIBridge::get_singleton()->start_ability(project_id.utf8().get_data(), sb.as_string().utf8().get_data())) {
+			return OK;
+		}
+		return ERR_CANT_CREATE;
+	}
+
+	ERR_FAIL_COND_V(!request_permission("ohos.permission.NDK_START_SELF_UI_ABILITY"), ERR_UNAUTHORIZED);
+
+	const String bundle_name = get_bundle_name();
+	CharString bundle_utf8 = bundle_name.utf8();
+
+	AbilityBase_Element element;
+	element.bundleName = const_cast<char *>(bundle_utf8.get_data());
+	element.moduleName = const_cast<char *>("entry");
+	element.abilityName = const_cast<char *>("EntryAbility");
+
+	AbilityBase_Want *want = OH_AbilityBase_CreateWant(element);
+	ERR_FAIL_NULL_V(want, ERR_CANT_CREATE);
+
+	OH_AbilityBase_SetWantCharParam(want, "godot_project_id", project_id.utf8().get_data());
+	OH_AbilityBase_SetWantCharParam(want, "godot_args", sb.as_string().utf8().get_data());
+
+	AbilityRuntime_ErrorCode err = OH_AbilityRuntime_StartSelfUIAbility(want);
+	OH_AbilityBase_DestroyWant(want);
+	ERR_FAIL_COND_V_MSG(err != ABILITY_RUNTIME_ERROR_CODE_NO_ERROR, ERR_CANT_CREATE, vformat("Failed to create instance with AbilityRuntime_ErrorCode: %d.", err));
+	return OK;
+}
+
+String OS_OpenHarmony::get_system_ca_certificates() {
+	String certfile;
+	Ref<DirAccess> da = DirAccess::create(DirAccess::ACCESS_FILESYSTEM);
+
+	if (da->file_exists("/etc/ssl/certs/cacert.pem")) {
+		certfile = "/etc/ssl/certs/cacert.pem";
+	}
+
+	if (certfile.is_empty()) {
+		return "";
+	}
+
+	Ref<FileAccess> f = FileAccess::open(certfile, FileAccess::READ);
+	ERR_FAIL_COND_V_MSG(f.is_null(), String(), vformat(R"(Failed to open system CA certificates file: "%s".)", certfile));
+
+	String data = f->get_as_text();
+
+	return data;
+}
+
+Error OS_OpenHarmony::get_entropy(uint8_t *r_buffer, int p_bytes) {
+	static bool rand_initialized = false;
+	if (!rand_initialized) {
+		OH_Crypto_ErrCode ret = OH_CryptoRand_Create(&crypto_rand);
+		ERR_FAIL_COND_V(ret != CRYPTO_SUCCESS, FAILED);
+		rand_initialized = true;
+
+		ret = OH_CryptoRand_EnableHardwareEntropy(crypto_rand);
+		if (ret != CRYPTO_SUCCESS) {
+			WARN_PRINT("Failed to enable hardware entropy.");
+		}
+	}
+
+	int left = p_bytes;
+	int ofs = 0;
+	while (left > 0) {
+		Crypto_DataBlob out = { NULL, 0 };
+		OH_Crypto_ErrCode ret = OH_CryptoRand_GenerateRandom(crypto_rand, left, &out);
+		ERR_FAIL_COND_V(ret != CRYPTO_SUCCESS, FAILED);
+
+		if (out.len == 0) {
+			OH_Crypto_FreeDataBlob(&out);
+			ERR_FAIL_V_MSG(FAILED, "CryptoRand returned 0 bytes unexpectedly.");
+		}
+
+		int chunk = MIN(left, (int)out.len);
+		memcpy(r_buffer + ofs, out.data, chunk);
+		left -= chunk;
+		ofs += chunk;
+
+		OH_Crypto_FreeDataBlob(&out);
+	}
+
+	return OK;
+}
+
+String OS_OpenHarmony::get_bundle_name() const {
+	static String ret;
+	if (ret.is_empty()) {
+		int32_t length = 0;
+		char buffer[256] = { 0 };
+		AbilityRuntime_ErrorCode error_code = OH_AbilityRuntime_ApplicationContextGetBundleName(buffer, 256, &length);
+		if (error_code == ABILITY_RUNTIME_ERROR_CODE_NO_ERROR) {
+			ret.append_utf8(buffer, length);
+		} else {
+			ret = "org.godotengine.template";
+		}
+	}
+	return ret;
+}

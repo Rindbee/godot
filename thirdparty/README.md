@@ -235,6 +235,7 @@ Patches:
 - `0004-mingw-no-cpuidex.patch` ([GH-92488](https://github.com/godotengine/godot/pull/92488))
 - `0005-mingw-llvm-arm64.patch` ([GH-93364](https://github.com/godotengine/godot/pull/93364))
 - `0006-explicit-includes.patch` ([GH-111557](https://github.com/godotengine/godot/pull/111557))
+- `0007-support-openharmony.patch` ([GH-](https://github.com/godotengine/godot/pull/))
 
 The `modules/raycast/godot_update_embree.py` script can be used to pull the
 relevant files from the latest Embree release and apply patches automatically.
@@ -409,6 +410,7 @@ Patches:
 
 - `0001-enable-both-gl-and-gles.patch` ([GH-72831](https://github.com/godotengine/godot/pull/72831))
 - `0002-revert-egl_static-removal.patch` ([GH-107312](https://github.com/godotengine/godot/pull/107312))
+- `0003-add-support-for-platform-ohos.patch` ([GH-](https://github.com/godotengine/godot/pull/107312))
 
 
 ## glslang

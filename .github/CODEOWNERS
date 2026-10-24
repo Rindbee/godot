@@ -414,6 +414,10 @@
 /platform/macos/**/SCsub                      @godotengine/macos @godotengine/buildsystem
 /platform/macos/doc_classes/                  @godotengine/macos @godotengine/documentation
 /platform/macos/editor/                       @godotengine/macos @godotengine/editor
+/platform/openharmony/                        @godotengine/openharmony
+/platform/openharmony/**/*.py                 @godotengine/openharmony @godotengine/buildsystem
+/platform/openharmony/**/SCsub                @godotengine/openharmony @godotengine/buildsystem
+/platform/openharmony/doc_classes/            @godotengine/openharmony @godotengine/documentation
 /platform/visionos/                           @godotengine/xr
 /platform/visionos/**/*.py                    @godotengine/xr @godotengine/buildsystem
 /platform/visionos/**/SCsub                   @godotengine/xr @godotengine/buildsystem
