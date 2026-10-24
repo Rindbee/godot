@@ -392,7 +392,7 @@ Patches:
 Files extracted from upstream source:
 - `LICENSE`
 
-Files generated from [upstream web instance](https://gen.glad.sh/):
+Files generated from [upstream web instance](https://gen.glad.sh/#generator=c&api=egl%3D1.5%2Cgl%3D3.3%2Cgles2%3D3.2%2Cglx%3D1.4&profile=gl%3Dcompatibility%2Cgles1%3Dcommon&extensions=EGL_ANDROID_blob_cache%2CEGL_EXT_platform_base%2CEGL_KHR_platform_wayland%2CEGL_KHR_platform_x11%2CGL_ARB_debug_output%2CGL_ARB_framebuffer_object%2CGL_ARB_get_program_binary%2CGL_EXT_framebuffer_blit%2CGL_EXT_framebuffer_multisample%2CGL_EXT_framebuffer_object%2CGL_OVR_multiview%2CGL_OVR_multiview2%2CGLX_ARB_create_context%2CGLX_ARB_create_context_profile%2CGLX_ARB_get_proc_address%2CGLX_EXT_swap_control%2CGLX_MESA_swap_control%2CGLX_SGI_swap_control&options=LOADER%2CMERGE%2CMERGE):
 - `EGL/eglplatform.h`
 - `KHR/khrplatform.h`
 - `egl.c`
