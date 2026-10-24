@@ -414,7 +414,7 @@ Patches:
 ## glslang
 
 - Upstream: https://github.com/KhronosGroup/glslang
-- Version: vulkan-sdk-1.4.335.0 (b5782e52ee2f7b3e40bb9c80d15b47016e008bc9, 2025)
+- Version: vulkan-sdk-1.4.350.0 (275822a6261ee689aadb1da5f09a0ec2f058685c, 2026)
 - License: glslang
 
 Version should be kept in sync with the one of the used Vulkan SDK (see `vulkan`
@@ -1053,7 +1053,7 @@ Patches:
 ## spirv-cross
 
 - Upstream: https://github.com/KhronosGroup/SPIRV-Cross
-- Version: git (fb0c1a307cca4b4a9d891837bf4c44d17fe2d324, 2025)
+- Version: vulkan-sdk-1.4.350.0 (1a6169566c73d3da552748fc372fe2bbb856e46e, 2026)
 - License: Apache 2.0
 
 Files extracted from upstream source:
@@ -1069,7 +1069,7 @@ to generate Metal source from Vulkan SPIR-V.
 ## spirv-headers
 
 - Upstream: https://github.com/KhronosGroup/SPIRV-Headers
-- Version: vulkan-sdk-1.4.335.0 (b824a462d4256d720bebb40e78b9eb8f78bbb305, 2025)
+- Version: vulkan-sdk-1.4.350.0 (ad9184e76a66b1001c29db9b0a3e87f646c64de0, 2026)
 - License: MIT
 
 Files extracted from upstream source:
@@ -1081,7 +1081,7 @@ Files extracted from upstream source:
 ## spirv-reflect
 
 - Upstream: https://github.com/KhronosGroup/SPIRV-Reflect
-- Version: vulkan-sdk-1.4.335.0 (ef913b3ab3da1becca3cf46b15a10667c67bebe5, 2025)
+- Version: vulkan-sdk-1.4.350.0 (c90b7b781cdcff63cf1b409ffc7ca0a714e0425e, 2026)
 - License: Apache 2.0
 
 Version should be kept in sync with the one of the used Vulkan SDK (see `vulkan`
@@ -1096,6 +1096,7 @@ Patches:
 
 - `0001-zero-size-for-sc-sized-arrays.patch` ([GH-94985](https://github.com/godotengine/godot/pull/94985))
 - `0002-spirv-headers.patch` ([GH-111452](https://github.com/godotengine/godot/pull/111452))
+- `0003-findnode-id-lookup-table.patch` ([GH-121835](https://github.com/godotengine/godot/pull/121835))
 
 
 ## swappy-frame-pacing
@@ -1182,7 +1183,7 @@ Patches:
 ## volk
 
 - Upstream: https://github.com/zeux/volk
-- Version: vulkan-sdk-1.4.335.0 (4f3bcee79618a9abe79f4c717c50379197c77512, 2025)
+- Version: vulkan-sdk-1.4.350.0 (3ca312a4f38baa63d8006b6905abbeeb89c8087d, 2026)
 - License: MIT
 
 Version should be kept in sync with the one of the used Vulkan SDK (see `vulkan`
@@ -1197,7 +1198,7 @@ Files extracted from upstream source:
 ## vulkan
 
 - Upstream: https://github.com/KhronosGroup/Vulkan-Headers
-- Version: vulkan-sdk-1.4.335.0 (2fa203425eb4af9dfc6b03f97ef72b0b5bcb8350, 2025)
+- Version: vulkan-sdk-1.4.350.0 (8864cdc896bbc2a9b6eb36b3218fc9ef57908d77, 2026)
 - License: Apache 2.0
 
 Unless there is a specific reason to package a more recent version, please stick
@@ -1206,7 +1207,7 @@ to tagged SDK releases. All Vulkan libraries and headers should be kept in sync 
 - Update Vulkan SDK components to the matching tag (see "vulkan")
 - Update volk (see "volk")
 - Update glslang (see "glslang")
-- Update spirv-headers (see "spriv-headers")
+- Update spirv-headers (see "spirv-headers")
 - Update spirv-cross (see "spirv-cross")
 - Update spirv-reflect (see "spirv-reflect")
 
@@ -1219,7 +1220,7 @@ Files extracted from upstream source:
 SDK release: https://github.com/KhronosGroup/Vulkan-Utility-Libraries/blob/main/include/vulkan/vk_enum_string_helper.h
 
 `vk_mem_alloc.h` is taken from https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
-Version: 3.3.0 (1d8f600fd424278486eade7ed3e877c99f0846b1, 2025)
+Version: 3.4.0 (3aa921224c154a0d2c43912bc88e1c42ce1f7607, 2026)
 `vk_mem_alloc.cpp` is a Godot file and should be preserved on updates.
 
 Patches:
