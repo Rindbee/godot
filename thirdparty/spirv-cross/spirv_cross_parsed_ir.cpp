@@ -49,6 +49,7 @@ ParsedIR::ParsedIR()
 	pool_group->pools[TypeAccessChain].reset(new ObjectPool<SPIRAccessChain>);
 	pool_group->pools[TypeUndef].reset(new ObjectPool<SPIRUndef>);
 	pool_group->pools[TypeString].reset(new ObjectPool<SPIRString>);
+	pool_group->pools[TypeDebugLocalVariable].reset(new ObjectPool<SPIRDebugLocalVariable>);
 }
 
 // Should have been default-implemented, but need this on MSVC 2013.
@@ -78,7 +79,7 @@ ParsedIR &ParsedIR::operator=(ParsedIR &&other) SPIRV_CROSS_NOEXCEPT
 		memory_model = other.memory_model;
 
 		default_entry_point = other.default_entry_point;
-		source = other.source;
+		sources = std::move(other.sources);
 		loop_iteration_depth_hard = other.loop_iteration_depth_hard;
 		loop_iteration_depth_soft = other.loop_iteration_depth_soft;
 
@@ -110,7 +111,7 @@ ParsedIR &ParsedIR::operator=(const ParsedIR &other)
 		continue_block_to_loop_header = other.continue_block_to_loop_header;
 		entry_points = other.entry_points;
 		default_entry_point = other.default_entry_point;
-		source = other.source;
+		sources = other.sources;
 		loop_iteration_depth_hard = other.loop_iteration_depth_hard;
 		loop_iteration_depth_soft = other.loop_iteration_depth_soft;
 		addressing_model = other.addressing_model;
@@ -366,8 +367,8 @@ void ParsedIR::set_decoration_string(ID id, Decoration decoration, const string 
 
 	switch (decoration)
 	{
-	case DecorationHlslSemanticGOOGLE:
-		dec.hlsl_semantic = argument;
+	case DecorationUserSemantic:
+		dec.user_semantic = argument;
 		break;
 
 	case DecorationUserTypeGOOGLE:
@@ -403,6 +404,10 @@ void ParsedIR::set_decoration(ID id, Decoration decoration, uint32_t argument)
 		dec.offset = argument;
 		break;
 
+	case DecorationOffsetIdEXT:
+		dec.offset_id = argument;
+		break;
+
 	case DecorationXfbBuffer:
 		dec.xfb_buffer = argument;
 		break;
@@ -417,6 +422,10 @@ void ParsedIR::set_decoration(ID id, Decoration decoration, uint32_t argument)
 
 	case DecorationArrayStride:
 		dec.array_stride = argument;
+		break;
+
+	case DecorationArrayStrideIdEXT:
+		dec.array_stride_id = argument;
 		break;
 
 	case DecorationMatrixStride:
@@ -489,6 +498,10 @@ void ParsedIR::set_member_decoration(TypeID id, uint32_t index, Decoration decor
 
 	case DecorationOffset:
 		dec.offset = argument;
+		break;
+
+	case DecorationOffsetIdEXT:
+		dec.offset_id = argument;
 		break;
 
 	case DecorationXfbBuffer:
@@ -644,6 +657,8 @@ uint32_t ParsedIR::get_decoration(ID id, Decoration decoration) const
 		return dec.component;
 	case DecorationOffset:
 		return dec.offset;
+	case DecorationOffsetIdEXT:
+		return dec.offset_id;
 	case DecorationXfbBuffer:
 		return dec.xfb_buffer;
 	case DecorationXfbStride:
@@ -660,6 +675,8 @@ uint32_t ParsedIR::get_decoration(ID id, Decoration decoration) const
 		return dec.spec_id;
 	case DecorationArrayStride:
 		return dec.array_stride;
+	case DecorationArrayStrideIdEXT:
+		return dec.array_stride_id;
 	case DecorationMatrixStride:
 		return dec.matrix_stride;
 	case DecorationIndex:
@@ -686,8 +703,8 @@ const string &ParsedIR::get_decoration_string(ID id, Decoration decoration) cons
 
 	switch (decoration)
 	{
-	case DecorationHlslSemanticGOOGLE:
-		return dec.hlsl_semantic;
+	case DecorationUserSemantic:
+		return dec.user_semantic;
 
 	case DecorationUserTypeGOOGLE:
 		return dec.user_type;
@@ -719,6 +736,10 @@ void ParsedIR::unset_decoration(ID id, Decoration decoration)
 		dec.offset = 0;
 		break;
 
+	case DecorationOffsetIdEXT:
+		dec.offset_id = 0;
+		break;
+
 	case DecorationXfbBuffer:
 		dec.xfb_buffer = 0;
 		break;
@@ -747,8 +768,8 @@ void ParsedIR::unset_decoration(ID id, Decoration decoration)
 		dec.spec_id = 0;
 		break;
 
-	case DecorationHlslSemanticGOOGLE:
-		dec.hlsl_semantic.clear();
+	case DecorationUserSemantic:
+		dec.user_semantic.clear();
 		break;
 
 	case DecorationFPRoundingMode:
@@ -805,6 +826,8 @@ uint32_t ParsedIR::get_member_decoration(TypeID id, uint32_t index, Decoration d
 		return dec.binding;
 	case DecorationOffset:
 		return dec.offset;
+	case DecorationOffsetIdEXT:
+		return dec.offset_id;
 	case DecorationXfbBuffer:
 		return dec.xfb_buffer;
 	case DecorationXfbStride:
@@ -843,8 +866,8 @@ void ParsedIR::set_member_decoration_string(TypeID id, uint32_t index, Decoratio
 
 	switch (decoration)
 	{
-	case DecorationHlslSemanticGOOGLE:
-		dec.hlsl_semantic = argument;
+	case DecorationUserSemantic:
+		dec.user_semantic = argument;
 		break;
 
 	default:
@@ -864,8 +887,8 @@ const string &ParsedIR::get_member_decoration_string(TypeID id, uint32_t index, 
 
 		switch (decoration)
 		{
-		case DecorationHlslSemanticGOOGLE:
-			return dec.hlsl_semantic;
+		case DecorationUserSemantic:
+			return dec.user_semantic;
 
 		default:
 			return empty_string;
@@ -902,6 +925,10 @@ void ParsedIR::unset_member_decoration(TypeID id, uint32_t index, Decoration dec
 		dec.offset = 0;
 		break;
 
+	case DecorationOffsetIdEXT:
+		dec.offset_id = 0;
+		break;
+
 	case DecorationXfbBuffer:
 		dec.xfb_buffer = 0;
 		break;
@@ -918,8 +945,8 @@ void ParsedIR::unset_member_decoration(TypeID id, uint32_t index, Decoration dec
 		dec.spec_id = 0;
 		break;
 
-	case DecorationHlslSemanticGOOGLE:
-		dec.hlsl_semantic.clear();
+	case DecorationUserSemantic:
+		dec.user_semantic.clear();
 		break;
 
 	default:
