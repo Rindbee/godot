@@ -2462,7 +2462,7 @@ static GLADapiproc glad_gl_get_proc(void *vuserptr, const char *name) {
     return result;
 }
 
-static void* _glad_gles_loader_handle = NULL;
+static void* _glad_GL_loader_handle = NULL;
 
 static void* glad_gl_dlopen_handle(void) {
 #if GLAD_PLATFORM_APPLE
@@ -2480,15 +2480,17 @@ static void* glad_gl_dlopen_handle(void) {
         "libGL-1.so",
   #endif
         "libGL.so.1",
-        "libGL.so"
+        "libGL.so",
+        "libEGL.so.1",
+        "libEGL.so"
     };
 #endif
 
-    if (_glad_gles_loader_handle == NULL) {
-        _glad_gles_loader_handle = glad_get_dlopen_handle(NAMES, sizeof(NAMES) / sizeof(NAMES[0]));
+    if (_glad_GL_loader_handle == NULL) {
+        _glad_GL_loader_handle = glad_get_dlopen_handle(NAMES, sizeof(NAMES) / sizeof(NAMES[0]));
     }
 
-    return _glad_gles_loader_handle;
+    return _glad_GL_loader_handle;
 }
 
 static struct _glad_gl_userptr glad_gl_build_userptr(void *handle) {
@@ -2503,6 +2505,9 @@ static struct _glad_gl_userptr glad_gl_build_userptr(void *handle) {
 #else
     userptr.gl_get_proc_address_ptr =
         (GLADglprocaddrfunc) glad_dlsym_handle(handle, "glXGetProcAddressARB");
+    if (!userptr.gl_get_proc_address_ptr)
+        userptr.gl_get_proc_address_ptr =
+            (GLADglprocaddrfunc) glad_dlsym_handle(handle, "eglGetProcAddress");
 #endif
 
     return userptr;
@@ -2514,7 +2519,7 @@ int gladLoaderLoadGL(void) {
     int did_load = 0;
     struct _glad_gl_userptr userptr;
 
-    did_load = _glad_gles_loader_handle == NULL;
+    did_load = _glad_GL_loader_handle == NULL;
     handle = glad_gl_dlopen_handle();
     if (handle) {
         userptr = glad_gl_build_userptr(handle);
@@ -2532,9 +2537,9 @@ int gladLoaderLoadGL(void) {
 
 
 void gladLoaderUnloadGL(void) {
-    if (_glad_gles_loader_handle != NULL) {
-        glad_close_dlopen_handle(_glad_gles_loader_handle);
-        _glad_gles_loader_handle = NULL;
+    if (_glad_GL_loader_handle != NULL) {
+        glad_close_dlopen_handle(_glad_GL_loader_handle);
+        _glad_GL_loader_handle = NULL;
     }
 }
 
