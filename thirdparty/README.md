@@ -406,6 +406,7 @@ Patches:
 
 - `0001-enable-both-gl-and-gles.patch` ([GH-72831](https://github.com/godotengine/godot/pull/72831))
 - `0002-revert-egl_static-removal.patch` ([GH-107312](https://github.com/godotengine/godot/pull/107312))
+- `0003-improve-loading-initial-egl-and-extensions-symbols.patch` ([GH-](https://github.com/godotengine/godot/pull/107312))
 
 
 ## glslang
