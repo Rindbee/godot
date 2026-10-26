@@ -85,27 +85,34 @@ int EGLManager::_get_gldisplay_id(void *p_display) {
 	GLDisplay new_gldisplay;
 	new_gldisplay.display = p_display;
 
-	if (GLAD_EGL_VERSION_1_5) {
-		Vector<EGLAttrib> attribs = _get_platform_display_attributes();
-		new_gldisplay.egl_display = eglGetPlatformDisplay(_get_platform_extension_enum(), new_gldisplay.display, (attribs.size() > 0) ? attribs.ptr() : nullptr);
-	} else if (GLAD_EGL_EXT_platform_base) {
+	bool use_default = true;
+	if (has_platform_extension) {
+		if (GLAD_EGL_VERSION_1_5) {
+			Vector<EGLAttrib> attribs = _get_platform_display_attributes();
+			new_gldisplay.egl_display = eglGetPlatformDisplay(_get_platform_extension_enum(), new_gldisplay.display, attribs.ptr());
+			use_default = false;
+		} else if (GLAD_EGL_EXT_platform_base) {
 #ifdef EGL_EXT_platform_base
-		// eglGetPlatformDisplayEXT wants its attributes as EGLint, so we'll truncate
-		// what we already have. It's a bit naughty but I'm really not sure what else
-		// we could do here.
-		Vector<EGLint> attribs;
-		for (const EGLAttrib &attrib : _get_platform_display_attributes()) {
-			attribs.push_back((EGLint)attrib);
-		}
+			// eglGetPlatformDisplayEXT wants its attributes as EGLint, so we'll truncate
+			// what we already have. It's a bit naughty but I'm really not sure what else
+			// we could do here.
+			Vector<EGLint> attribs;
+			for (const EGLAttrib &attrib : _get_platform_display_attributes()) {
+				attribs.push_back((EGLint)attrib);
+			}
 
-		new_gldisplay.egl_display = eglGetPlatformDisplayEXT(_get_platform_extension_enum(), new_gldisplay.display, (attribs.size() > 0) ? attribs.ptr() : nullptr);
+			new_gldisplay.egl_display = eglGetPlatformDisplayEXT(_get_platform_extension_enum(), new_gldisplay.display, attribs.ptr());
 #endif // EGL_EXT_platform_base
-	} else {
+			use_default = false;
+		}
+	}
+	if (use_default) {
 		NativeDisplayType *native_display_type = (NativeDisplayType *)new_gldisplay.display;
 		new_gldisplay.egl_display = eglGetDisplay(*native_display_type);
 	}
 
-	ERR_FAIL_COND_V(eglGetError() != EGL_SUCCESS, -1);
+	EGLint last_error = eglGetError();
+	ERR_FAIL_COND_V_MSG(last_error != EGL_SUCCESS, -1, vformat("Failed to create a EGL display with error code: 0x%X.", last_error));
 
 	ERR_FAIL_COND_V_MSG(new_gldisplay.egl_display == EGL_NO_DISPLAY, -1, "Can't create an EGL display.");
 
@@ -203,7 +210,7 @@ Error EGLManager::_gldisplay_create_context(GLDisplay &p_gldisplay) {
 		8,
 		EGL_GREEN_SIZE,
 		8,
-		EGL_GREEN_SIZE,
+		EGL_BLUE_SIZE,
 		8,
 		EGL_ALPHA_SIZE,
 		8,
@@ -225,7 +232,7 @@ Error EGLManager::_gldisplay_create_context(GLDisplay &p_gldisplay) {
 
 	Vector<EGLint> context_attribs = _get_platform_context_attribs();
 	p_gldisplay.egl_context = eglCreateContext(p_gldisplay.egl_display, p_gldisplay.egl_config, EGL_NO_CONTEXT, (context_attribs.size() > 0) ? context_attribs.ptr() : nullptr);
-	ERR_FAIL_COND_V_MSG(p_gldisplay.egl_context == EGL_NO_CONTEXT, ERR_CANT_CREATE, vformat("Can't create an EGL context. Error code: %d", eglGetError()));
+	ERR_FAIL_COND_V_MSG(p_gldisplay.egl_context == EGL_NO_CONTEXT, ERR_CANT_CREATE, vformat("Can't create an EGL context. Error code: 0x%X", eglGetError()));
 
 	return OK;
 }
@@ -290,16 +297,14 @@ Error EGLManager::window_create(DisplayServerEnums::WindowID p_window_id, void *
 	}
 #endif
 
-	if (GLAD_EGL_VERSION_1_5) {
+	if (has_platform_extension && GLAD_EGL_VERSION_1_5) {
 		glwindow.egl_surface = eglCreatePlatformWindowSurface(gldisplay.egl_display, gldisplay.egl_config, p_native_window, egl_attribs.ptr());
 	} else {
 		EGLNativeWindowType *native_window_type = (EGLNativeWindowType *)p_native_window;
 		glwindow.egl_surface = eglCreateWindowSurface(gldisplay.egl_display, gldisplay.egl_config, *native_window_type, nullptr);
 	}
 
-	if (glwindow.egl_surface == EGL_NO_SURFACE) {
-		return ERR_CANT_CREATE;
-	}
+	ERR_FAIL_COND_V_MSG(glwindow.egl_surface == EGL_NO_SURFACE, ERR_CANT_CREATE, vformat("Failed to get an egl surface. error: 0x%X", eglGetError()));
 
 	glwindow.initialized = true;
 
@@ -449,49 +454,80 @@ EGLConfig EGLManager::get_config(DisplayServerEnums::WindowID p_window_id) {
 
 Error EGLManager::initialize(void *p_native_display) {
 #if defined(GLAD_ENABLED) && !defined(EGL_STATIC)
-	// Loading EGL with a new display gets us just the bare minimum API. We'll then
-	// have to temporarily get a proper display and reload EGL once again to
-	// initialize everything else.
-	if (!gladLoaderLoadEGL(EGL_NO_DISPLAY)) {
-		ERR_FAIL_V_MSG(ERR_UNAVAILABLE, "Can't load EGL dynamic library.");
+	// Load the EGL dynamic library on the platform.
+	int version = gladLoaderLoadEGL(EGL_NO_DISPLAY);
+	ERR_FAIL_COND_V_MSG(!version, ERR_UNAVAILABLE, "Can't load EGL dynamic library.");
+
+	// Not all implementations conform to the EGL specification.
+	// To use a display method specific to a particular platform, at least the following is required:
+	// 1. Platform enumeration which is provided by the platform extension;
+	// 2. Platform-specific functions (EGL 1.5+) or extension functions (provided by EGL_EXT_platform_base).
+
+	has_platform_extension = false;
+	if (GLAD_EGL_VERSION_1_4) {
+		// Querying client extensions is provided by EXT_client_extensions (Requires libEGL 1.4+).
+		String client_extensions_string = eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
+		if (eglGetError() == EGL_SUCCESS && !client_extensions_string.is_empty()) {
+			const char *platform = _get_platform_extension_name();
+			has_platform_extension = client_extensions_string.split(" ").has(platform);
+		}
 	}
 
 	EGLDisplay tmp_display = EGL_NO_DISPLAY;
 
-	if (GLAD_EGL_EXT_platform_base) {
+	bool use_default = true;
+	if (has_platform_extension) {
+		if (GLAD_EGL_VERSION_1_5) {
+			Vector<EGLAttrib> attribs = _get_platform_display_attributes();
+			tmp_display = eglGetPlatformDisplay(_get_platform_extension_enum(), p_native_display, attribs.ptr());
+			use_default = false;
+		} else if (GLAD_EGL_EXT_platform_base) {
 #ifdef EGL_EXT_platform_base
-		// eglGetPlatformDisplayEXT wants its attributes as EGLint.
-		Vector<EGLint> attribs;
-		for (const EGLAttrib &attrib : _get_platform_display_attributes()) {
-			attribs.push_back((EGLint)attrib);
-		}
-		tmp_display = eglGetPlatformDisplayEXT(_get_platform_extension_enum(), p_native_display, attribs.ptr());
+			// eglGetPlatformDisplayEXT wants its attributes as EGLint.
+			Vector<EGLint> attribs;
+			for (const EGLAttrib &attrib : _get_platform_display_attributes()) {
+				attribs.push_back((EGLint)attrib);
+			}
+			tmp_display = eglGetPlatformDisplayEXT(_get_platform_extension_enum(), p_native_display, attribs.ptr());
 #endif // EGL_EXT_platform_base
-	} else {
+			use_default = false;
+		}
+	}
+	if (use_default) {
 		WARN_PRINT("EGL: EGL_EXT_platform_base not found during init, using default platform.");
 		EGLNativeDisplayType *native_display_type = (EGLNativeDisplayType *)p_native_display;
 		tmp_display = eglGetDisplay(*native_display_type);
 	}
 
-	if (tmp_display == EGL_NO_DISPLAY) {
-		eglTerminate(tmp_display);
-		ERR_FAIL_V_MSG(ERR_UNAVAILABLE, "Can't get a valid initial EGL display.");
+	ERR_FAIL_COND_V_MSG(tmp_display == EGL_NO_DISPLAY, ERR_UNAVAILABLE, vformat("Can't get a valid initial EGL display. EGL error code: 0x%X.", eglGetError()));
+
+	EGLint major = 0, minor = 0;
+	if (!eglInitialize(tmp_display, &major, &minor)) {
+		ERR_FAIL_V_MSG(ERR_UNAVAILABLE, vformat("Can't get a initialized initial EGL display. EGL error code: 0x%X.", eglGetError()));
 	}
 
-	eglInitialize(tmp_display, nullptr, nullptr);
-
-	int version = gladLoaderLoadEGL(tmp_display);
-	if (!version) {
+	// Load the EGL functionality supported by the initial EGL display.
+	if (!gladLoaderLoadEGL(tmp_display)) {
 		eglTerminate(tmp_display);
-		ERR_FAIL_V_MSG(ERR_UNAVAILABLE, "Can't load EGL dynamic library.");
+		ERR_FAIL_V_MSG(ERR_UNAVAILABLE, "Can't load the EGL functionality supported by the initial EGL display.");
 	}
-
-	int major = GLAD_VERSION_MAJOR(version);
-	int minor = GLAD_VERSION_MINOR(version);
 
 	print_verbose(vformat("Loaded EGL %d.%d", major, minor));
 
-	ERR_FAIL_COND_V_MSG(!GLAD_EGL_VERSION_1_4, ERR_UNAVAILABLE, vformat("EGL version is too old! %d.%d < 1.4", major, minor));
+	ERR_FAIL_COND_V_MSG(!GLAD_EGL_VERSION_1_4, ERR_UNAVAILABLE, vformat("The EGL version supported by the display is too old! %d.%d < 1.4", major, minor));
+
+	if (!has_platform_extension && (GLAD_EGL_EXT_platform_base || GLAD_EGL_VERSION_1_5)) {
+		// To prioritize the use of a platform-specific display, re-verify the existence of the platform extension.
+		String client_extensions_string = eglQueryString(tmp_display, EGL_EXTENSIONS);
+
+		if (eglGetError() == EGL_SUCCESS) {
+			const char *platform = _get_platform_extension_name();
+			has_platform_extension = client_extensions_string.split(" ").has(platform);
+			if (!has_platform_extension) {
+				WARN_PRINT(vformat("EGL platform extension \"%s\" not found.", platform));
+			}
+		}
+	}
 
 	eglTerminate(tmp_display);
 #endif
@@ -519,16 +555,6 @@ Error EGLManager::initialize(void *p_native_display) {
 		}
 	}
 #endif
-
-	String client_extensions_string = eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
-
-	// If the above method fails, we don't support client extensions, so there's nothing to check.
-	if (eglGetError() == EGL_SUCCESS) {
-		const char *platform = _get_platform_extension_name();
-		if (!client_extensions_string.split(" ").has(platform)) {
-			ERR_FAIL_V_MSG(ERR_UNAVAILABLE, vformat("EGL platform extension \"%s\" not found.", platform));
-		}
-	}
 
 	return OK;
 }

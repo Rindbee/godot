@@ -39,6 +39,8 @@
 
 class EGLManager {
 private:
+	bool has_platform_extension = false;
+
 	// An EGL-side representation of a display with its own rendering
 	// context.
 	struct GLDisplay {
