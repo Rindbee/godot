@@ -56,6 +56,14 @@ extern "C" {
   #endif
 #endif
 
+#ifndef GLAD_PLATFORM_OPENHARMONY
+  #ifdef __OPENHARMONY__
+    #define GLAD_PLATFORM_OPENHARMONY 1
+  #else
+    #define GLAD_PLATFORM_OPENHARMONY 0
+  #endif
+#endif
+
 #ifndef GLAD_PLATFORM_EMSCRIPTEN
   #ifdef __EMSCRIPTEN__
     #define GLAD_PLATFORM_EMSCRIPTEN 1
@@ -268,6 +276,7 @@ typedef void (*GLADpostcallback)(void *ret, const char *name, GLADapiproc apipro
 #define EGL_PBUFFER_BIT 0x0001
 #define EGL_PIXEL_ASPECT_RATIO 0x3092
 #define EGL_PIXMAP_BIT 0x0002
+#define EGL_PLATFORM_OHOS_KHR 0x34E0
 #define EGL_PLATFORM_WAYLAND_KHR 0x31D8
 #define EGL_PLATFORM_X11_KHR 0x31D5
 #define EGL_PLATFORM_X11_SCREEN_KHR 0x31D6

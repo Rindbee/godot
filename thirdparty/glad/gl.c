@@ -2472,6 +2472,8 @@ static void* glad_gl_dlopen_handle(void) {
         "/System/Library/Frameworks/OpenGL.framework/OpenGL",
         "/System/Library/Frameworks/OpenGL.framework/Versions/Current/OpenGL"
     };
+#elif GLAD_PLATFORM_OPENHARMONY
+    static const char *NAMES[] = {"libGLv4.so"};
 #elif GLAD_PLATFORM_WIN32
     static const char *NAMES[] = {"opengl32.dll"};
 #else
@@ -2661,6 +2663,8 @@ static void* glad_gles2_dlopen_handle(void) {
     static const char *NAMES[] = {"libGLESv2.dylib"};
 #elif GLAD_PLATFORM_WIN32
     static const char *NAMES[] = {"GLESv2.dll", "libGLESv2.dll"};
+#elif GLAD_PLATFORM_OPENHARMONY
+    static const char *NAMES[] = {"libGLESv3.so", "libGLESv2.so"};
 #else
     static const char *NAMES[] = {"libGLESv2.so.2", "libGLESv2.so"};
 #endif

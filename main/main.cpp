@@ -2394,6 +2394,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		GLOBAL_DEF_RST(PropertyInfo(Variant::STRING, "rendering/rendering_device/driver.ios", PROPERTY_HINT_ENUM, "metal,vulkan"), "metal");
 		GLOBAL_DEF_RST(PropertyInfo(Variant::STRING, "rendering/rendering_device/driver.visionos", PROPERTY_HINT_ENUM, "metal"), "metal");
 		GLOBAL_DEF_RST(PropertyInfo(Variant::STRING, "rendering/rendering_device/driver.macos", PROPERTY_HINT_ENUM, "metal,vulkan"), "metal");
+		GLOBAL_DEF_RST(PropertyInfo(Variant::STRING, "rendering/rendering_device/driver.openharmony", PROPERTY_HINT_ENUM, "vulkan"), "vulkan");
 
 		GLOBAL_DEF_RST("rendering/rendering_device/fallback_to_vulkan", true);
 		GLOBAL_DEF_RST("rendering/rendering_device/fallback_to_d3d12", true);
@@ -2409,6 +2410,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		GLOBAL_DEF_RST(PropertyInfo(Variant::STRING, "rendering/gl_compatibility/driver.android", PROPERTY_HINT_ENUM, "opengl3"), "opengl3");
 		GLOBAL_DEF_RST(PropertyInfo(Variant::STRING, "rendering/gl_compatibility/driver.ios", PROPERTY_HINT_ENUM, "opengl3"), "opengl3");
 		GLOBAL_DEF_RST(PropertyInfo(Variant::STRING, "rendering/gl_compatibility/driver.macos", PROPERTY_HINT_ENUM, "opengl3,opengl3_angle"), "opengl3");
+		GLOBAL_DEF_RST(PropertyInfo(Variant::STRING, "rendering/gl_compatibility/driver.openharmony", PROPERTY_HINT_ENUM, "opengl3,opengl3_es"), "opengl3");
 
 		GLOBAL_DEF_RST("rendering/gl_compatibility/nvidia_disable_threaded_optimization", true);
 		GLOBAL_DEF_RST("rendering/gl_compatibility/fallback_to_angle", true);
@@ -2810,6 +2812,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	GLOBAL_DEF_NOVAL(PropertyInfo(Variant::STRING, "display/display_server/driver.linuxbsd", PROPERTY_HINT_ENUM, "default,x11,wayland,headless"), "default");
 	GLOBAL_DEF_NOVAL(PropertyInfo(Variant::STRING, "display/display_server/driver.android", PROPERTY_HINT_ENUM, "default,android,headless"), "default");
 	GLOBAL_DEF_NOVAL(PropertyInfo(Variant::STRING, "display/display_server/driver.ios", PROPERTY_HINT_ENUM, "default,iOS,headless"), "default");
+	GLOBAL_DEF_NOVAL(PropertyInfo(Variant::STRING, "display/display_server/driver.openharmony", PROPERTY_HINT_ENUM, "default,openharmony,headless"), "default");
 	GLOBAL_DEF_NOVAL(PropertyInfo(Variant::STRING, "display/display_server/driver.visionos", PROPERTY_HINT_ENUM, "default,visionOS,headless"), "default");
 	GLOBAL_DEF_NOVAL(PropertyInfo(Variant::STRING, "display/display_server/driver.macos", PROPERTY_HINT_ENUM, "default,macos,headless"), "default");
 

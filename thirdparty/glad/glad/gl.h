@@ -92,6 +92,14 @@ extern "C" {
   #endif
 #endif
 
+#ifndef GLAD_PLATFORM_OPENHARMONY
+  #ifdef __OPENHARMONY__
+    #define GLAD_PLATFORM_OPENHARMONY 1
+  #else
+    #define GLAD_PLATFORM_OPENHARMONY 0
+  #endif
+#endif
+
 #ifndef GLAD_PLATFORM_EMSCRIPTEN
   #ifdef __EMSCRIPTEN__
     #define GLAD_PLATFORM_EMSCRIPTEN 1

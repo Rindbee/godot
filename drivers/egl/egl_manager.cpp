@@ -200,6 +200,10 @@ Error EGLManager::_gldisplay_create_context(GLDisplay &p_gldisplay) {
 		1,
 		EGL_GREEN_SIZE,
 		1,
+#ifdef OPENHARMONY_ENABLED
+		EGL_ALPHA_SIZE,
+		8,
+#endif // OPENHARMONY_ENABLED
 		EGL_DEPTH_SIZE,
 		24,
 		EGL_NONE,
